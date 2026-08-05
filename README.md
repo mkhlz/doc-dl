@@ -245,5 +245,4 @@ Websites can change their layouts or restrict access. In those cases,
 
 ## License
 
-No open-source license has been selected for this project yet. Until a
-`LICENSE` file is added, the repository is not licensed for public reuse.
+This project is licensed under the [MIT License](LICENSE).
