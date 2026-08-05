@@ -7,13 +7,13 @@ architecture="$(uname -m)"
 
 case "$system:$architecture" in
     Linux:x86_64|Linux:amd64)
-        asset="doc-dl-linux-x64.tar.gz"
+        asset="doc-dl_linux.tar.gz"
         ;;
     Darwin:x86_64)
-        asset="doc-dl-macos-x64.tar.gz"
+        asset="doc-dl_macos_x64.tar.gz"
         ;;
     Darwin:arm64|Darwin:aarch64)
-        asset="doc-dl-macos-arm64.tar.gz"
+        asset="doc-dl_macos_arm64.tar.gz"
         ;;
     *)
         echo "No portable doc-dl release is available for $system $architecture" >&2
@@ -24,7 +24,7 @@ esac
 release_root="https://github.com/$repository/releases/latest/download"
 temporary_root="$(mktemp -d)"
 archive_path="$temporary_root/$asset"
-checksum_path="$temporary_root/SHA256SUMS"
+checksum_path="$temporary_root/SHA2-256SUMS"
 install_root="${XDG_DATA_HOME:-$HOME/.local/share}/doc-dl"
 binary_root="$HOME/.local/bin"
 backup_root=""
@@ -36,11 +36,11 @@ trap cleanup EXIT HUP INT TERM
 
 echo "Downloading $asset..."
 curl -fL "$release_root/$asset" -o "$archive_path"
-curl -fL "$release_root/SHA256SUMS" -o "$checksum_path"
+curl -fL "$release_root/SHA2-256SUMS" -o "$checksum_path"
 
 expected="$(awk -v name="$asset" '$2 == name { print $1; exit }' "$checksum_path")"
 if [ -z "$expected" ]; then
-    echo "SHA256SUMS does not contain $asset" >&2
+    echo "SHA2-256SUMS does not contain $asset" >&2
     exit 1
 fi
 if command -v sha256sum >/dev/null 2>&1; then

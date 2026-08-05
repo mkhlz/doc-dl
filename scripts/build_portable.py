@@ -12,10 +12,10 @@ import tarfile
 from pathlib import Path
 
 TARGETS = {
-    "windows-x64": ".zip",
-    "linux-x64": ".tar.gz",
-    "macos-x64": ".tar.gz",
-    "macos-arm64": ".tar.gz",
+    "windows-x64": ("doc-dl_win", ".zip"),
+    "linux-x64": ("doc-dl_linux", ".tar.gz"),
+    "macos-x64": ("doc-dl_macos_x64", ".tar.gz"),
+    "macos-arm64": ("doc-dl_macos_arm64", ".tar.gz"),
 }
 CHROMIUM_DIRECTORY = re.compile(r"^chromium-(\d+)$")
 
@@ -50,8 +50,8 @@ def select_chromium_directory(browser_root: Path) -> Path:
 
 def archive_bundle(bundle: Path, output: Path, target: str) -> Path:
     output.mkdir(parents=True, exist_ok=True)
-    extension = TARGETS[target]
-    asset = output / f"doc-dl-{target}{extension}"
+    stem, extension = TARGETS[target]
+    asset = output / f"{stem}{extension}"
     asset.unlink(missing_ok=True)
     if extension == ".zip":
         created = Path(

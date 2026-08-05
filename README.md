@@ -69,6 +69,8 @@ check the installation.
 
 ## Other installation methods
 
+<a id="release-files"></a>
+
 ### Download a release archive manually
 
 Open the [GitHub Releases](https://github.com/mkhlz/doc-dl/releases) page and
@@ -77,15 +79,18 @@ permanent and add that folder to `PATH`.
 
 | Release file | System |
 | --- | --- |
-| `doc-dl-windows-x64.zip` | Windows 10 or newer, Intel or AMD 64-bit |
-| `doc-dl-linux-x64.tar.gz` | 64-bit Linux |
-| `doc-dl-macos-x64.tar.gz` | Intel Mac |
-| `doc-dl-macos-arm64.tar.gz` | Apple Silicon Mac |
-| `SHA256SUMS` | Checksums for every archive |
+| `doc-dl_win.zip` | Windows 10 or newer, Intel or AMD 64-bit |
+| `doc-dl_linux.tar.gz` | 64-bit Linux |
+| `doc-dl_macos_x64.tar.gz` | Intel Mac |
+| `doc-dl_macos_arm64.tar.gz` | Apple Silicon Mac |
+| `SHA2-256SUMS` | SHA-256 checksums for every archive |
 
 Portable archives are larger than the Python wheel because they contain a
 matching Chromium browser. This is what lets browser-backed downloads work
-without asking the user to install anything else.
+without asking the user to install anything else. Sizes of a few hundred
+megabytes are expected. During a workflow run, GitHub also displays temporary
+`build-bin-*` artifacts that transfer these archives between jobs; the final
+GitHub Release shows the public filenames in the table above.
 
 ### Install from a Python wheel
 
@@ -207,17 +212,18 @@ python -m playwright install --no-shell chromium
 
 ## Building portable releases
 
-The release workflow lives in `.github/workflows/release.yml` and has two safe
-entry points:
+The release workflow lives in `.github/workflows/release.yml` and follows the
+same build, collect, tag, and publish sequence for every entry point:
 
-- Run **Build portable releases** manually from the GitHub Actions page to test
-  all packages without publishing a release.
-- Push a version tag such as `v0.1.3` to build the same packages, generate
-  `SHA256SUMS`, and publish them on the GitHub Releases page.
+- Run **Release** manually with the version field empty to build and verify all
+  packages without creating a tag or GitHub Release.
+- Run **Release** manually with a bare version such as `0.1.3` to verify that it
+  matches the package, build the packages, push the tag, and publish the release.
+- Push a bare version tag such as `0.1.3` to run the same build and publish path.
 
 Before tagging, update the version in `pyproject.toml` and
 `src/doc_dl/__init__.py`, run the development checks, and commit the release
-changes. The tag should be `v` followed by that exact version.
+changes. The tag should be the exact version without a `v` prefix.
 
 For a local portable build, install the build extras, place Chromium in a
 dedicated directory, and run the builder for the current operating system:

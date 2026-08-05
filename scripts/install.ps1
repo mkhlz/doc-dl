@@ -7,11 +7,11 @@ if ($architecture -ne "X64") {
     throw "The portable Windows release currently supports x64. Detected: $architecture"
 }
 
-$assetName = "doc-dl-windows-x64.zip"
+$assetName = "doc-dl_win.zip"
 $releaseRoot = "https://github.com/$repository/releases/latest/download"
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("doc-dl-install-" + [guid]::NewGuid())
 $archivePath = Join-Path $temporaryRoot $assetName
-$checksumPath = Join-Path $temporaryRoot "SHA256SUMS"
+$checksumPath = Join-Path $temporaryRoot "SHA2-256SUMS"
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\doc-dl"
 $backupRoot = $null
 
@@ -19,12 +19,12 @@ New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 try {
     Write-Host "Downloading $assetName..."
     Invoke-WebRequest "$releaseRoot/$assetName" -OutFile $archivePath
-    Invoke-WebRequest "$releaseRoot/SHA256SUMS" -OutFile $checksumPath
+    Invoke-WebRequest "$releaseRoot/SHA2-256SUMS" -OutFile $checksumPath
 
     $escapedName = [regex]::Escape($assetName)
     $checksumLine = Get-Content $checksumPath | Where-Object { $_ -match "\s+$escapedName$" } | Select-Object -First 1
     if (-not $checksumLine) {
-        throw "SHA256SUMS does not contain $assetName"
+        throw "SHA2-256SUMS does not contain $assetName"
     }
     $expected = ($checksumLine -split "\s+")[0].ToLowerInvariant()
     $actual = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
