@@ -2,8 +2,13 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repository = if ($env:DOC_DL_REPOSITORY) { $env:DOC_DL_REPOSITORY } else { "mkhlz/doc-dl" }
-$architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-if ($architecture -ne "X64") {
+$architecture = if ($env:PROCESSOR_ARCHITEW6432) {
+    $env:PROCESSOR_ARCHITEW6432
+}
+else {
+    $env:PROCESSOR_ARCHITECTURE
+}
+if ($architecture -notin @("AMD64", "ARM64")) {
     throw "The portable Windows release currently supports x64. Detected: $architecture"
 }
 
