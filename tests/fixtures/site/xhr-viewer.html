@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="doc-dl-fixture" content="xhr-viewer">
+    <title>XHR PDF viewer</title>
+  </head>
+  <body>
+    <main>
+      <h1>Network response fixture</h1>
+      <p id="status">Loading document</p>
+      <iframe id="viewer" title="PDF viewer"></iframe>
+    </main>
+    <script>
+      fetch('/xhr/document?id=fixture-token')
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.blob();
+        })
+        .then((blob) => {
+          document.querySelector('#viewer').src = URL.createObjectURL(blob);
+          document.querySelector('#status').textContent = 'Document loaded';
+        })
+        .catch((error) => {
+          document.querySelector('#status').textContent = `Failed: ${error.message}`;
+        });
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "direct-pdf",
+      "path": "/files/sample.pdf",
+      "behavior": "Return a valid PDF with Content-Type application/pdf and Content-Disposition attachment.",
+      "expected_strategy": "direct-http",
+      "expected_provenance": "original"
+    },
+    {
+      "id": "direct-docx-misleading-url",
+      "path": "/opaque/document/42",
+      "behavior": "Return a valid DOCX signature and DOCX media type without an extension in the URL.",
+      "expected_strategy": "direct-http",
+      "expected_provenance": "original"
+    },
+    {
+      "id": "redirect-pdf",
+      "path": "/redirect/pdf",
+      "behavior": "Redirect twice before returning the valid PDF.",
+      "expected_strategy": "direct-http",
+      "expected_provenance": "original"
+    },
+    {
+      "id": "static-link",
+      "path": "/site/static-link.html",
+      "behavior": "Return the static-link fixture.",
+      "expected_strategy": "static-html",
+      "expected_provenance": "original"
+    },
+    {
+      "id": "jsonld-link",
+      "path": "/site/jsonld-link.html",
+      "behavior": "Return the JSON-LD fixture.",
+      "expected_strategy": "static-html",
+      "expected_provenance": "original"
+    },
+    {
+      "id": "javascript-download",
+      "path": "/site/js-download.html",
+      "behavior": "Return a page whose button initiates a browser attachment download.",
+      "expected_strategy": "browser-download",
+      "expected_provenance": "original"
+    },
+    {
+      "id": "xhr-viewer",
+      "path": "/site/xhr-viewer.html",
+      "behavior": "Return a page that fetches a PDF and renders the resulting Blob URL.",
+      "expected_strategy": "browser-network",
+      "expected_provenance": "original"
+    },
+    {
+      "id": "lazy-viewer",
+      "path": "/site/lazy-viewer.html",
+      "behavior": "Return six pages whose image requests begin only when their containers intersect the viewport.",
+      "expected_strategy": "viewer-render",
+      "expected_provenance": "reconstructed",
+      "expected_pages": 6
+    },
+    {
+      "id": "authentication-required",
+      "path": "/auth/document",
+      "behavior": "Return a login page until a fixture session cookie exists, then return the valid PDF.",
+      "expected_error": "authentication_required"
+    },
+    {
+      "id": "rate-limit-retry",
+      "path": "/retry/rate-limit",
+      "behavior": "Return 429 with Retry-After once, then return the valid PDF.",
+      "expected_strategy": "direct-http",
+      "expected_retries": 1
+    },
+    {
+      "id": "safe-resume",
+      "path": "/resume/pdf",
+      "behavior": "Terminate the first full transfer, then honor Range and If-Range with a stable ETag.",
+      "expected_strategy": "direct-http",
+      "expected_resumed": true
+    },
+    {
+      "id": "html-masquerading-as-pdf",
+      "path": "/errors/fake.pdf",
+      "behavior": "Return a login HTML document with a misleading PDF path and media type.",
+      "expected_error": "unexpected_content"
+    },
+    {
+      "id": "corrupt-pdf",
+      "path": "/errors/corrupt.pdf",
+      "behavior": "Return bytes beginning with a PDF marker but containing no valid PDF structure.",
+      "expected_error": "corrupt_document"
+    }
+  ]
+}
+

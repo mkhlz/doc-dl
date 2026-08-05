@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="doc-dl-fixture" content="lazy-viewer">
+    <title>Lazy document viewer</title>
+    <style>
+      body {
+        margin: 0;
+        background: #d9dde3;
+        font-family: sans-serif;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 12px 20px;
+        background: #172033;
+        color: white;
+      }
+
+      #viewer {
+        width: min(820px, calc(100% - 32px));
+        margin: 24px auto;
+      }
+
+      [data-doc-page] {
+        box-sizing: border-box;
+        min-height: 1060px;
+        margin: 0 0 24px;
+        padding: 20px;
+        background: white;
+        box-shadow: 0 4px 18px rgb(0 0 0 / 20%);
+      }
+
+      [data-doc-page] img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .placeholder {
+        display: grid;
+        min-height: 1000px;
+        place-items: center;
+        color: #687286;
+      }
+    </style>
+  </head>
+  <body>
+    <header>Six-page lazy viewer fixture</header>
+    <main id="viewer" data-total-pages="6"></main>
+    <script>
+      const viewer = document.querySelector('#viewer');
+
+      for (let pageNumber = 1; pageNumber <= 6; pageNumber += 1) {
+        const page = document.createElement('section');
+        page.dataset.docPage = String(pageNumber);
+        page.dataset.state = 'waiting';
+        page.innerHTML = `<div class="placeholder">Waiting for page ${pageNumber}</div>`;
+        viewer.append(page);
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+
+          const page = entry.target;
+          if (page.dataset.state !== 'waiting') continue;
+
+          page.dataset.state = 'loading';
+          const pageNumber = page.dataset.docPage;
+          const image = new Image();
+          image.alt = `Fixture document page ${pageNumber}`;
+          image.addEventListener('load', () => {
+            page.replaceChildren(image);
+            page.dataset.state = 'loaded';
+          });
+          image.addEventListener('error', () => {
+            page.dataset.state = 'failed';
+          });
+          image.src = `/viewer/pages/${pageNumber}.svg`;
+          observer.unobserve(page);
+        }
+      }, {
+        rootMargin: '300px 0px'
+      });
+
+      document.querySelectorAll('[data-doc-page]').forEach((page) => observer.observe(page));
+    </script>
+  </body>
+</html>
+

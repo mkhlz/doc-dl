@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>False attachment document viewer</title>
+    <style>
+      body { margin: 0; background: #d9dde3; font-family: sans-serif; }
+      #viewer { width: min(820px, calc(100% - 32px)); margin: 24px auto; }
+      [data-doc-page] { min-height: 1060px; margin-bottom: 24px; background: white; }
+      [data-doc-page] img { display: block; width: 100%; height: auto; }
+    </style>
+  </head>
+  <body>
+    <main id="viewer" data-total-pages="6"></main>
+    <script>
+      fetch('/telemetry/status').catch(() => {});
+
+      const viewer = document.querySelector('#viewer');
+      for (let pageNumber = 1; pageNumber <= 6; pageNumber += 1) {
+        const page = document.createElement('section');
+        page.dataset.docPage = String(pageNumber);
+        page.innerHTML = `<img alt="Page ${pageNumber}" src="/viewer/pages/${pageNumber}.svg">`;
+        viewer.append(page);
+      }
+    </script>
+  </body>
+</html>

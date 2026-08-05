@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="doc-dl-fixture" content="javascript-download">
+    <title>JavaScript document download</title>
+  </head>
+  <body>
+    <main>
+      <h1>Browser download fixture</h1>
+      <button id="download" type="button">Download document</button>
+    </main>
+    <script>
+      document.querySelector('#download').addEventListener('click', () => {
+        window.location.assign('/browser/download/sample.pdf');
+      });
+    </script>
+  </body>
+</html>
+

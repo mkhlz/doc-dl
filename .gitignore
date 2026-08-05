@@ -1,0 +1,35 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
+.venv-wheel-test/
+venv/
+smoke-output/
+tmp/
+
+# Private project material and locally downloaded documents.
+docs/
+PROJECT.txt
+downloads/
+output/
+*.doc-dl.json
+/Scribd.pdf
+
+# Browser sessions contain cookies and account state.
+.doc-dl-state/
+playwright/.auth/
+
+# Interrupted transfers and protected resume metadata.
+*.part
+*.part.json
+.doc-dl-*.part
+.doc-dl-*.part.json
+
+# Generated diagnostics can contain sensitive site metadata even after redaction.
+doc-dl-diagnostics-*/

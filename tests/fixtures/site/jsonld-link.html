@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="doc-dl-fixture" content="jsonld-link">
+    <meta property="og:title" content="Research paper">
+    <title>JSON-LD document landing page</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "DigitalDocument",
+        "name": "Research paper",
+        "encoding": {
+          "@type": "MediaObject",
+          "contentUrl": "/files/sample.pdf",
+          "encodingFormat": "application/pdf"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>Research paper</h1>
+      <p>The document URL is present only in structured metadata.</p>
+    </main>
+  </body>
+</html>
+
