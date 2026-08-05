@@ -24,47 +24,93 @@ verified file or get a clear reason why that was not possible.
 - Keep sign-in cookies in an isolated browser profile, never in command-line
   arguments.
 
-## Requirements
-
-- Python 3.11 or newer
-- Playwright Chromium
-- Windows, macOS, or Linux
-
 ## Quickstart
 
-### Install from a wheel
+The portable release includes Python, every required library, and Chromium. You
+do not need to install Python or Playwright.
+
+### Windows
+
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/install.ps1 | iex
+```
+
+The installer downloads the latest Windows release, verifies its SHA-256
+checksum, installs it under your local application-data folder, and adds
+`doc-dl` to your user `PATH`.
+
+### macOS or Linux
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/install.sh | sh
+```
+
+The installer selects the right release for Linux x64, Intel macOS, or Apple
+Silicon, verifies its checksum, and links `doc-dl` into `~/.local/bin`.
+
+### Download a document
+
+Open a new terminal after installation and give `doc-dl` a URL:
+
+```powershell
+doc-dl "https://www.scribd.com/document/1039114955/GMAT-Syllabus-PDF"
+```
+
+PowerShell users can also use the winget-style `-Url` form:
+
+```powershell
+doc-dl -Url "https://www.scribd.com/document/1039114955/GMAT-Syllabus-PDF"
+```
+
+That is the whole everyday workflow. Run `doc-dl doctor` if you ever want to
+check the installation.
+
+## Other installation methods
+
+### Download a release archive manually
+
+Open the [GitHub Releases](https://github.com/mkhlz/doc-dl/releases) page and
+download the archive for your computer. Extract the `doc-dl` folder somewhere
+permanent and add that folder to `PATH`.
+
+| Release file | System |
+| --- | --- |
+| `doc-dl-windows-x64.zip` | Windows 10 or newer, Intel or AMD 64-bit |
+| `doc-dl-linux-x64.tar.gz` | 64-bit Linux |
+| `doc-dl-macos-x64.tar.gz` | Intel Mac |
+| `doc-dl-macos-arm64.tar.gz` | Apple Silicon Mac |
+| `SHA256SUMS` | Checksums for every archive |
+
+Portable archives are larger than the Python wheel because they contain a
+matching Chromium browser. This is what lets browser-backed downloads work
+without asking the user to install anything else.
+
+### Install from a Python wheel
+
+Python users can keep using the smaller wheel:
 
 ```powershell
 python -m pip install .\dist\doc_dl-0.1.2-py3-none-any.whl
-python -m playwright install chromium
+python -m playwright install --no-shell chromium
 doc-dl doctor
 ```
+
+This method requires Python 3.11 or newer.
 
 ### Install for development
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe -m playwright install --no-shell chromium
 .\.venv\Scripts\doc-dl.exe doctor
 ```
 
 On macOS and Linux, use `.venv/bin/python` and `.venv/bin/doc-dl` instead.
 
-### Download one URL right away
-
-```powershell
-doc-dl -Url "https://www.scribd.com/document/1039114955/GMAT-Syllabus-PDF"
-```
-
-The normal URL form also works:
-
-```powershell
-doc-dl "https://www.scribd.com/document/1039114955/GMAT-Syllabus-PDF"
-```
-
-If PowerShell cannot find `doc-dl`, call the executable inside the active
-virtual environment directly:
+If the virtual environment is not activated, call its executable directly:
 
 ```powershell
 .\.venv\Scripts\doc-dl.exe -Url "https://www.scribd.com/document/1039114955/GMAT-Syllabus-PDF"
@@ -148,7 +194,7 @@ doc-dl doctor
 application-state location. If Chromium is missing, run:
 
 ```powershell
-python -m playwright install chromium
+python -m playwright install --no-shell chromium
 ```
 
 ## Development checks
@@ -159,6 +205,34 @@ python -m playwright install chromium
 .\.venv\Scripts\python.exe -m pip wheel --no-deps . --wheel-dir dist
 ```
 
+## Building portable releases
+
+The release workflow lives in `.github/workflows/release.yml` and has two safe
+entry points:
+
+- Run **Build portable releases** manually from the GitHub Actions page to test
+  all packages without publishing a release.
+- Push a version tag such as `v0.1.3` to build the same packages, generate
+  `SHA256SUMS`, and publish them on the GitHub Releases page.
+
+Before tagging, update the version in `pyproject.toml` and
+`src/doc_dl/__init__.py`, run the development checks, and commit the release
+changes. The tag should be `v` followed by that exact version.
+
+For a local portable build, install the build extras, place Chromium in a
+dedicated directory, and run the builder for the current operating system:
+
+```powershell
+python -m pip install ".[build]"
+$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD\build\playwright-browsers"
+python -m playwright install --no-shell chromium
+python scripts\build_portable.py --target windows-x64
+```
+
+The resulting archive is written to `release-assets/`. The builder runs both
+`doc-dl version` and `doc-dl doctor` against the frozen executable before it
+creates the archive.
+
 ## Provider support
 
 - `generic`: direct files, redirects, page-source discovery, JavaScript
@@ -168,3 +242,8 @@ python -m playwright install chromium
 
 Websites can change their layouts or restrict access. In those cases,
 `doc-dl` returns a stable error and leaves no unverified final file behind.
+
+## License
+
+No open-source license has been selected for this project yet. Until a
+`LICENSE` file is added, the repository is not licensed for public reuse.

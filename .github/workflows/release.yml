@@ -1,0 +1,145 @@
+name: Build portable releases
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project and Chromium
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev]"
+          python -m playwright install --with-deps --no-shell chromium
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          python -c "import os; from doc_dl import __version__;
+          expected = f'v{__version__}'; actual = os.environ['RELEASE_TAG'];
+          raise SystemExit(0 if actual == expected else
+          f'Release tag {actual} does not match package version {expected}')"
+      - name: Run checks
+        run: |
+          python -m ruff check src tests scripts
+          python -m ruff format --check src tests scripts
+          python -m pytest
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            runner: windows-latest
+            asset: doc-dl-windows-x64.zip
+            playwright: install --no-shell chromium
+          - target: linux-x64
+            runner: ubuntu-24.04
+            asset: doc-dl-linux-x64.tar.gz
+            playwright: install --with-deps --no-shell chromium
+          - target: macos-x64
+            runner: macos-13
+            asset: doc-dl-macos-x64.tar.gz
+            playwright: install --no-shell chromium
+          - target: macos-arm64
+            runner: macos-14
+            asset: doc-dl-macos-arm64.tar.gz
+            playwright: install --no-shell chromium
+    runs-on: ${{ matrix.runner }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/build/playwright-browsers
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[build]"
+      - name: Install portable Chromium
+        run: python -m playwright ${{ matrix.playwright }}
+      - name: Build and verify bundle
+        run: python scripts/build_portable.py --target ${{ matrix.target }}
+      - name: Upload platform archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.target }}
+          path: release-assets/${{ matrix.asset }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  collect:
+    name: Collect release assets
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Download platform archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          path: release-assets
+          merge-multiple: true
+      - name: Generate checksums
+        run: python scripts/write_checksums.py release-assets
+      - name: Upload complete release set
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-dl-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    needs: collect
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download complete release set
+        uses: actions/download-artifact@v4
+        with:
+          name: doc-dl-release-assets
+          path: release-assets
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --title "doc-dl $version"

@@ -11,7 +11,7 @@ from doc_dl import __version__
 from doc_dl.doctor import doctor_payload, run_doctor
 from doc_dl.engine import DownloadEngine
 from doc_dl.errors import DocDlError
-from doc_dl.events import EventSink
+from doc_dl.events import EventSink, safe_print
 from doc_dl.models import DownloadRequest
 from doc_dl.providers.registry import ProviderRegistry
 from doc_dl.session import SessionManager
@@ -202,11 +202,11 @@ def _run_doctor(argv: Sequence[str]) -> int:
     checks = run_doctor()
     payload = doctor_payload(checks)
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False))
+        safe_print(json.dumps(payload, ensure_ascii=False), file=sys.stdout)
     elif not args.quiet:
         for check in checks:
             label = "OK" if check.ok else "MISSING"
-            print(f"[{label}] {check.name}: {check.detail}")
+            safe_print(f"[{label}] {check.name}: {check.detail}", file=sys.stdout)
     return 0 if payload["ok"] else 50
 
 

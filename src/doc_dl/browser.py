@@ -72,6 +72,7 @@ class BrowserExtractor:
                 try:
                     context = playwright.chromium.launch_persistent_context(
                         user_data_dir=str(profile_path),
+                        channel="chromium",
                         headless=True,
                         accept_downloads=True,
                         viewport={"width": 1440, "height": 1000},
@@ -218,6 +219,7 @@ class BrowserExtractor:
             with sync_playwright() as playwright:
                 context = playwright.chromium.launch_persistent_context(
                     user_data_dir=str(profile_path),
+                    channel="chromium",
                     headless=False,
                     accept_downloads=False,
                     viewport={"width": 1280, "height": 900},

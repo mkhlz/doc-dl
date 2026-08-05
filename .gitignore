@@ -7,6 +7,7 @@ __pycache__/
 htmlcov/
 build/
 dist/
+release-assets/
 .venv/
 .venv-wheel-test/
 venv/

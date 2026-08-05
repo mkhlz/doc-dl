@@ -43,7 +43,7 @@ def run_doctor(state: StatePaths | None = None) -> list[DoctorCheck]:
         with sync_playwright() as playwright:
             executable = Path(playwright.chromium.executable_path)
             if executable.is_file():
-                browser = playwright.chromium.launch(headless=True)
+                browser = playwright.chromium.launch(channel="chromium", headless=True)
                 browser.close()
                 browser_ok = True
                 browser_detail = str(executable)

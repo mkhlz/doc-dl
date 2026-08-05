@@ -10,6 +10,17 @@ from typing import Any, TextIO
 from doc_dl.redaction import redact_headers, redact_url
 
 
+def safe_print(value: object, *, file: TextIO, flush: bool = True) -> None:
+    text = str(value)
+    encoding = getattr(file, "encoding", None)
+    if encoding:
+        try:
+            text.encode(encoding)
+        except (LookupError, UnicodeEncodeError):
+            text = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+    print(text, file=file, flush=flush)
+
+
 def _json_default(value: object) -> object:
     if isinstance(value, Path):
         return str(value)
@@ -53,19 +64,18 @@ class EventSink:
     def emit(self, event: str, **payload: Any) -> None:
         data = _redact_payload({"event": event, "version": 1, **payload})
         if self.json_mode:
-            print(
+            safe_print(
                 json.dumps(data, ensure_ascii=False, default=_json_default, sort_keys=True),
                 file=self.stream,
-                flush=True,
             )
             return
 
         if event == "error":
             message = str(data.get("message", data.get("error", "Unknown error")))
-            print(f"ERROR: {message}", file=self.error_stream, flush=True)
+            safe_print(f"ERROR: {message}", file=self.error_stream)
             detail = data.get("detail")
             if detail:
-                print(f"  {detail}", file=self.error_stream, flush=True)
+                safe_print(f"  {detail}", file=self.error_stream)
             return
 
         if self.quiet and event != "complete":
@@ -75,11 +85,11 @@ class EventSink:
 
         message = data.get("message")
         if message:
-            print(str(message), file=self.stream, flush=True)
+            safe_print(message, file=self.stream)
         elif event == "download_progress":
             downloaded = data.get("downloaded", 0)
             total = data.get("total")
             if total:
-                print(f"Downloaded {downloaded}/{total} bytes", file=self.stream, flush=True)
+                safe_print(f"Downloaded {downloaded}/{total} bytes", file=self.stream)
         elif event == "complete":
-            print(str(data.get("path", "")), file=self.stream, flush=True)
+            safe_print(data.get("path", ""), file=self.stream)
