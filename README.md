@@ -50,6 +50,32 @@ curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/install
 The installer selects the right release for Linux x64, Intel macOS, or Apple
 Silicon, verifies its checksum, and links `doc-dl` into `~/.local/bin`.
 
+### Uninstall
+
+Remove the installed program and its PATH entry:
+
+```powershell
+irm https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninstall.ps1 | iex
+```
+
+On macOS or Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninstall.sh | sh
+```
+
+Both commands preserve isolated sign-in profiles and other runtime state. To
+remove that state too, including saved browser sessions, use one of these
+explicit commands:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninstall.ps1))) -PurgeData
+```
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninstall.sh | sh -s -- --purge-data
+```
+
 ### Download a document
 
 Open a new terminal after installation and give `doc-dl` a URL:
