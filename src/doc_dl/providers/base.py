@@ -20,6 +20,12 @@ class Provider:
     def login_url(self) -> str | None:
         return None
 
+    def page_title(self, page: Any) -> str | None:
+        """An accurate document title, if the provider can find one better than
+        the browser page's own <title>. Return None to fall back to page.title()."""
+        del page
+        return None
+
     def activate(self, page: Any, timeout_ms: float) -> None:
         del page, timeout_ms
 

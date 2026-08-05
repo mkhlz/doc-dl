@@ -19,6 +19,7 @@ from doc_dl.models import (
 )
 from doc_dl.providers.base import Provider
 from doc_dl.render import PdfRenderer
+from doc_dl.runtime import configure_browsers_path, install_chromium, is_chromium_installed
 from doc_dl.verify import base_media_type, response_looks_document_like
 
 _DOWNLOAD_TEXT = re.compile(r"\b(download|export|save\s+(?:as|file|pdf)|get\s+pdf)\b", re.I)
@@ -28,6 +29,12 @@ class BrowserExtractor:
     def __init__(self, sink: EventSink, state: StatePaths | None = None) -> None:
         self.sink = sink
         self.state = state or StatePaths.discover()
+
+    def _ensure_chromium(self) -> None:
+        configure_browsers_path(self.state)
+        if is_chromium_installed():
+            return
+        install_chromium(self.sink, state=self.state)
 
     def discover(
         self,
@@ -50,6 +57,7 @@ class BrowserExtractor:
                 ),
             ) from exc
 
+        self._ensure_chromium()
         discovery = BrowserDiscovery()
         profile_path = self.state.profile(provider.name, request.profile)
         try:
@@ -124,7 +132,7 @@ class BrowserExtractor:
                             ) from exc
 
                     discovery.final_url = page.url
-                    discovery.title = page.title()
+                    discovery.title = provider.page_title(page) or page.title()
                     try:
                         provider.activate(page, min(30_000, self._remaining_ms(deadline)))
                     except DocDlError as exc:
@@ -213,6 +221,7 @@ class BrowserExtractor:
         except ImportError as exc:
             raise DocDlError("browser_unavailable", "Playwright is not installed") from exc
 
+        self._ensure_chromium()
         profile_path = self.state.profile(provider.name, profile)
         profile_path.mkdir(parents=True, exist_ok=True)
         try:

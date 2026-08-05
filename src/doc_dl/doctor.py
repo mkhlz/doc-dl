@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from doc_dl.config import StatePaths
+from doc_dl.runtime import build_variant, chromium_executable_path, effective_browsers_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,23 +36,24 @@ def run_doctor(state: StatePaths | None = None) -> list[DoctorCheck]:
         except importlib.metadata.PackageNotFoundError:
             checks.append(DoctorCheck(distribution, False, "not installed"))
 
-    browser_ok = False
-    browser_detail = "Playwright is not installed"
-    try:
-        from playwright.sync_api import sync_playwright
+    checks.append(DoctorCheck("build", True, build_variant(), required=False))
 
-        with sync_playwright() as playwright:
-            executable = Path(playwright.chromium.executable_path)
-            if executable.is_file():
-                browser = playwright.chromium.launch(channel="chromium", headless=True)
-                browser.close()
-                browser_ok = True
-                browser_detail = str(executable)
-            else:
-                browser_detail = f"missing: {executable}"
-    except Exception as exc:
-        browser_detail = str(exc)
-    checks.append(DoctorCheck("chromium", browser_ok, browser_detail))
+    executable = chromium_executable_path()
+    if executable is not None and executable.is_file():
+        checks.append(DoctorCheck("chromium", True, str(executable), required=False))
+    else:
+        checks.append(
+            DoctorCheck(
+                "chromium",
+                False,
+                "not installed — run 'doc-dl install-browser', or it installs "
+                "automatically the first time a browser-backed site needs it",
+                required=False,
+            )
+        )
+    checks.append(
+        DoctorCheck("browser-storage", True, str(effective_browsers_path(paths)), required=False)
+    )
 
     try:
         paths.root.mkdir(parents=True, exist_ok=True)

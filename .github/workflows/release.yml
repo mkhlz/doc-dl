@@ -114,7 +114,7 @@ jobs:
           python -m pytest
 
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.target }} (${{ matrix.variant }})
     needs: [prepare, test]
     permissions:
       contents: read
@@ -124,23 +124,47 @@ jobs:
         include:
           - target: windows-x64
             runner: windows-latest
-            artifact: build-bin-windows_x64
+            variant: slim
+            artifact: build-bin-windows_x64-slim
             asset: doc-dl_win.zip
+          - target: windows-x64
+            runner: windows-latest
+            variant: full
+            artifact: build-bin-windows_x64-full
+            asset: doc-dl_win_full.zip
             playwright: install --no-shell chromium
           - target: linux-x64
             runner: ubuntu-24.04
-            artifact: build-bin-linux_x86_64
+            variant: slim
+            artifact: build-bin-linux_x86_64-slim
             asset: doc-dl_linux.tar.gz
+          - target: linux-x64
+            runner: ubuntu-24.04
+            variant: full
+            artifact: build-bin-linux_x86_64-full
+            asset: doc-dl_linux_full.tar.gz
             playwright: install --with-deps --no-shell chromium
           - target: macos-x64
             runner: macos-15-intel
-            artifact: build-bin-macos_x86_64
+            variant: slim
+            artifact: build-bin-macos_x86_64-slim
             asset: doc-dl_macos_x64.tar.gz
+          - target: macos-x64
+            runner: macos-15-intel
+            variant: full
+            artifact: build-bin-macos_x86_64-full
+            asset: doc-dl_macos_x64_full.tar.gz
             playwright: install --no-shell chromium
           - target: macos-arm64
             runner: macos-15
-            artifact: build-bin-macos_arm64
+            variant: slim
+            artifact: build-bin-macos_arm64-slim
             asset: doc-dl_macos_arm64.tar.gz
+          - target: macos-arm64
+            runner: macos-15
+            variant: full
+            artifact: build-bin-macos_arm64-full
+            asset: doc-dl_macos_arm64_full.tar.gz
             playwright: install --no-shell chromium
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -161,9 +185,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ".[build]"
       - name: Install portable Chromium
+        if: matrix.variant == 'full'
         run: python -m playwright ${{ matrix.playwright }}
       - name: Build and verify bundle
-        run: python scripts/build_portable.py --target ${{ matrix.target }}
+        run: python scripts/build_portable.py --target ${{ matrix.target }} --variant ${{ matrix.variant }}
       - name: Upload platform archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

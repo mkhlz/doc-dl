@@ -8,15 +8,33 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from doc_dl import __version__
+from doc_dl.config import StatePaths
 from doc_dl.doctor import doctor_payload, run_doctor
 from doc_dl.engine import DownloadEngine
 from doc_dl.errors import DocDlError
 from doc_dl.events import EventSink, safe_print
 from doc_dl.models import DownloadRequest
 from doc_dl.providers.registry import ProviderRegistry
+from doc_dl.runtime import (
+    chromium_executable_path,
+    configure_browsers_path,
+    effective_browsers_path,
+    install_chromium,
+    is_chromium_installed,
+    uninstall_chromium,
+)
 from doc_dl.session import SessionManager
 
-COMMANDS = {"download", "login", "logout", "providers", "doctor", "version"}
+COMMANDS = {
+    "download",
+    "login",
+    "logout",
+    "providers",
+    "doctor",
+    "install-browser",
+    "uninstall-browser",
+    "version",
+}
 
 
 class DocDlArgumentParser(argparse.ArgumentParser):
@@ -92,6 +110,34 @@ def _login_parser(command: str) -> DocDlArgumentParser:
 
 def _simple_parser(command: str) -> DocDlArgumentParser:
     parser = DocDlArgumentParser(prog=f"doc-dl {command}")
+    _add_output_modes(parser)
+    return parser
+
+
+def _install_browser_parser() -> DocDlArgumentParser:
+    parser = DocDlArgumentParser(
+        prog="doc-dl install-browser",
+        description="Download and install the Chromium browser runtime",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Reinstall even if Chromium is already present",
+    )
+    _add_output_modes(parser)
+    return parser
+
+
+def _uninstall_browser_parser() -> DocDlArgumentParser:
+    parser = DocDlArgumentParser(
+        prog="doc-dl uninstall-browser",
+        description="Remove the Chromium browser runtime downloaded by doc-dl",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Delete without an interactive prompt",
+    )
     _add_output_modes(parser)
     return parser
 
@@ -210,9 +256,65 @@ def _run_doctor(argv: Sequence[str]) -> int:
     return 0 if payload["ok"] else 50
 
 
+def _run_install_browser(argv: Sequence[str]) -> int:
+    args = _install_browser_parser().parse_args(list(argv))
+    sink = _sink_from_args(args)
+    if not args.force and is_chromium_installed():
+        executable = chromium_executable_path()
+        sink.emit(
+            "complete",
+            message=f"Chromium is already installed at {executable}",
+            path=str(executable),
+        )
+        return 0
+    executable = install_chromium(sink)
+    sink.emit(
+        "complete",
+        message=f"Chromium installed at {executable}",
+        path=str(executable),
+    )
+    return 0
+
+
+def _run_uninstall_browser(argv: Sequence[str]) -> int:
+    args = _uninstall_browser_parser().parse_args(list(argv))
+    sink = _sink_from_args(args)
+    state = StatePaths.discover()
+    target = effective_browsers_path(state)
+    if not args.yes and target.exists():
+        answer = input(f"Delete the Chromium browser runtime at {target}? [y/N] ")
+        if answer.strip().casefold() not in {"y", "yes"}:
+            if not args.quiet:
+                print("No browser data was deleted.")
+            return 0
+    removed = uninstall_chromium(state)
+    if removed:
+        sink.emit(
+            "complete",
+            message=f"Removed the Chromium browser runtime from {target}",
+            path=str(target),
+        )
+    elif not args.quiet:
+        print("No installed browser runtime was found.")
+    return 0
+
+
+def _print_bare_invocation_help() -> None:
+    safe_print(_download_parser().format_help().rstrip(), file=sys.stdout)
+    safe_print("", file=sys.stdout)
+    safe_print("Quick examples:", file=sys.stdout)
+    safe_print('  doc-dl "https://example.com/document.pdf"', file=sys.stdout)
+    safe_print('  doc-dl -Url "https://example.com/document.pdf"', file=sys.stdout)
+    safe_print("  doc-dl doctor", file=sys.stdout)
+
+
 def run(argv: Sequence[str] | None = None) -> int:
+    configure_browsers_path()
     arguments = list(sys.argv[1:] if argv is None else argv)
-    command = arguments[0].casefold() if arguments else ""
+    if not arguments:
+        _print_bare_invocation_help()
+        return 0
+    command = arguments[0].casefold()
     command_args = arguments[1:] if command in COMMANDS else arguments
     sink: EventSink | None = None
     try:
@@ -224,6 +326,10 @@ def run(argv: Sequence[str] | None = None) -> int:
             return _run_providers(command_args)
         if command == "doctor":
             return _run_doctor(command_args)
+        if command == "install-browser":
+            return _run_install_browser(command_args)
+        if command == "uninstall-browser":
+            return _run_uninstall_browser(command_args)
         if command == "version":
             print(f"doc-dl {__version__}")
             return 0

@@ -12,7 +12,11 @@ if ($architecture -notin @("AMD64", "ARM64")) {
     throw "The portable Windows release currently supports x64. Detected: $architecture"
 }
 
-$assetName = "doc-dl_win.zip"
+$variant = if ($env:DOC_DL_VARIANT) { $env:DOC_DL_VARIANT.ToLowerInvariant() } else { "slim" }
+if ($variant -notin @("slim", "full")) {
+    throw "DOC_DL_VARIANT must be 'slim' or 'full'. Got: $variant"
+}
+$assetName = if ($variant -eq "full") { "doc-dl_win_full.zip" } else { "doc-dl_win.zip" }
 $releaseRoot = "https://github.com/$repository/releases/latest/download"
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("doc-dl-install-" + [guid]::NewGuid())
 $archivePath = Join-Path $temporaryRoot $assetName

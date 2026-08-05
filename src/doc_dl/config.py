@@ -55,3 +55,6 @@ class StatePaths:
 
     def cache(self) -> Path:
         return (self.root / "cache").resolve()
+
+    def browsers(self) -> Path:
+        return (self.root / "browsers").resolve()

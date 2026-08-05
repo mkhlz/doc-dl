@@ -21,6 +21,8 @@ downloads/
 output/
 *.doc-dl.json
 /Scribd.pdf
+/TODOS.md
+/*.pdf
 
 # Browser sessions contain cookies and account state.
 .doc-dl-state/

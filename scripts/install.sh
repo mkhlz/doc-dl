@@ -5,15 +5,28 @@ repository="${DOC_DL_REPOSITORY:-mkhlz/doc-dl}"
 system="$(uname -s)"
 architecture="$(uname -m)"
 
+variant="$(printf '%s' "${DOC_DL_VARIANT:-slim}" | tr '[:upper:]' '[:lower:]')"
+case "$variant" in
+    slim|full) ;;
+    *)
+        echo "DOC_DL_VARIANT must be 'slim' or 'full'. Got: $variant" >&2
+        exit 1
+        ;;
+esac
+suffix=""
+if [ "$variant" = "full" ]; then
+    suffix="_full"
+fi
+
 case "$system:$architecture" in
     Linux:x86_64|Linux:amd64)
-        asset="doc-dl_linux.tar.gz"
+        asset="doc-dl_linux${suffix}.tar.gz"
         ;;
     Darwin:x86_64)
-        asset="doc-dl_macos_x64.tar.gz"
+        asset="doc-dl_macos_x64${suffix}.tar.gz"
         ;;
     Darwin:arm64|Darwin:aarch64)
-        asset="doc-dl_macos_arm64.tar.gz"
+        asset="doc-dl_macos_arm64${suffix}.tar.gz"
         ;;
     *)
         echo "No portable doc-dl release is available for $system $architecture" >&2

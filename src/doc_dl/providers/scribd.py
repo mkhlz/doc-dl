@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from html import unescape
 from typing import Any
 
 from doc_dl.errors import DocDlError
@@ -14,6 +15,15 @@ _SCRIBD_EMBED = re.compile(
     r"^https?://(?:www\.)?scribd\.com/embeds/(\d+)/content",
     flags=re.IGNORECASE,
 )
+_TITLE_TAG = re.compile(r"<title>([^<]*)</title>", re.IGNORECASE)
+_TITLE_SUFFIX = re.compile(r"\s*\|\s*(?:PDF|Scribd|Document|Text|Text file)\b.*$", re.IGNORECASE)
+
+
+def _clean_scribd_title(raw_title: str) -> str | None:
+    """Strip Scribd's trailing ' | PDF | Scribd | Document' style suffix."""
+    title = unescape(raw_title).strip()
+    title = _TITLE_SUFFIX.sub("", title).strip()
+    return title or None
 
 
 class ScribdProvider(Provider):
@@ -41,6 +51,28 @@ class ScribdProvider(Provider):
 
     def login_url(self) -> str:
         return "https://www.scribd.com/login"
+
+    def page_title(self, page: Any) -> str | None:
+        # The viewer is loaded from the embed URL, whose own <title> is just
+        # "Scribd". The normal document page carries the real title instead.
+        try:
+            document_id = self.document_id(page.url)
+        except DocDlError:
+            return None
+        try:
+            response = page.request.get(
+                f"https://www.scribd.com/document/{document_id}",
+                timeout=10_000,
+            )
+            if not response.ok:
+                return None
+            html = response.text()
+        except Exception:
+            return None
+        match = _TITLE_TAG.search(html)
+        if not match:
+            return None
+        return _clean_scribd_title(match.group(1))
 
     def activate(self, page: Any, timeout_ms: float) -> None:
         try:

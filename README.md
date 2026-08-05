@@ -26,8 +26,19 @@ verified file or get a clear reason why that was not possible.
 
 ## Quickstart
 
-The portable release includes Python, every required library, and Chromium. You
-do not need to install Python or Playwright.
+The portable release includes Python and every required library, so you do not
+need to install Python yourself. There are two kinds of release:
+
+- **Slim** (recommended) — small download. The first time you open a site that
+  needs a browser to extract its document, `doc-dl` automatically downloads
+  Chromium once and reuses it after that. Direct file downloads never need
+  Chromium at all.
+- **Full** — a larger, offline-ready download with Chromium already included,
+  for machines that are offline or on a locked-down network where an
+  on-demand download would not work.
+
+If you are not sure which one you need, use slim. The commands below install
+the slim release by default.
 
 ### Windows
 
@@ -37,9 +48,15 @@ Open PowerShell and run:
 irm https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/install.ps1 | iex
 ```
 
-The installer downloads the latest Windows release, verifies its SHA-256
+The installer downloads the latest slim Windows release, verifies its SHA-256
 checksum, installs it under your local application-data folder, and adds
-`doc-dl` to your user `PATH`.
+`doc-dl` to your user `PATH`. To install the full offline build instead, set
+`DOC_DL_VARIANT` first:
+
+```powershell
+$env:DOC_DL_VARIANT = "full"
+irm https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/install.ps1 | iex
+```
 
 ### macOS or Linux
 
@@ -47,8 +64,13 @@ checksum, installs it under your local application-data folder, and adds
 curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/install.sh | sh
 ```
 
-The installer selects the right release for Linux x64, Intel macOS, or Apple
-Silicon, verifies its checksum, and links `doc-dl` into `~/.local/bin`.
+The installer selects the right slim release for Linux x64, Intel macOS, or
+Apple Silicon, verifies its checksum, and links `doc-dl` into `~/.local/bin`.
+For the full offline build instead:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/install.sh | DOC_DL_VARIANT=full sh
+```
 
 ### Uninstall
 
@@ -64,9 +86,10 @@ On macOS or Linux:
 curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninstall.sh | sh
 ```
 
-Both commands preserve isolated sign-in profiles and other runtime state. To
-remove that state too, including saved browser sessions, use one of these
-explicit commands:
+Both commands preserve isolated sign-in profiles, any Chromium runtime
+`doc-dl` downloaded on demand, and other runtime state. To remove that state
+too — sign-in sessions and any downloaded Chromium runtime together — use one
+of these explicit commands:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninstall.ps1))) -PurgeData
@@ -75,6 +98,10 @@ explicit commands:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninstall.sh | sh -s -- --purge-data
 ```
+
+To remove only the downloaded Chromium runtime and keep your sign-in profiles,
+use `doc-dl uninstall-browser` instead; see
+[Managing the Chromium browser runtime](#managing-the-chromium-browser-runtime).
 
 ### Download a document
 
@@ -93,6 +120,49 @@ doc-dl -Url "https://www.scribd.com/document/1039114955/GMAT-Syllabus-PDF"
 That is the whole everyday workflow. Run `doc-dl doctor` if you ever want to
 check the installation.
 
+### Try it with real sites
+
+Try these in PowerShell:
+
+- **W3C direct PDF**, quick smoke test — a plain file download, no browser
+  needed:
+
+  ```powershell
+  doc-dl "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+  ```
+
+- **Internet Archive public-domain PDF**:
+
+  ```powershell
+  doc-dl "https://ia801907.us.archive.org/17/items/librivoxcdcoverart36/bestfriend_2006.pdf"
+  ```
+
+- **arXiv research paper PDF**:
+
+  ```powershell
+  doc-dl "https://arxiv.org/pdf/2212.07286"
+  ```
+
+- **Scribd multi-page viewer test** — this is the case that needs Chromium,
+  so it is also a good way to see the one-time browser download in action on
+  a fresh install:
+
+  ```powershell
+  doc-dl "https://www.scribd.com/document/959028055/Ten-Page-Sample" --verbose
+  ```
+
+  Scribd downloads depend on the access available through your normal Scribd
+  account; the example above is a public
+  [Scribd sample](https://www.scribd.com/document/959028055/Ten-Page-Sample)
+  that does not require signing in.
+
+Use this pattern to keep files in your Downloads folder instead of the
+current directory:
+
+```powershell
+doc-dl "PASTE-URL-HERE" --output "$HOME\Downloads" --verbose
+```
+
 ## Other installation methods
 
 <a id="release-files"></a>
@@ -103,20 +173,31 @@ Open the [GitHub Releases](https://github.com/mkhlz/doc-dl/releases) page and
 download the archive for your computer. Extract the `doc-dl` folder somewhere
 permanent and add that folder to `PATH`.
 
+**Slim (recommended)** — Python and every required library, but no Chromium.
+The first browser-backed download triggers a one-time Chromium download; plain
+file downloads never need it.
+
 | Release file | System |
 | --- | --- |
 | `doc-dl_win.zip` | Windows 10 or newer, Intel or AMD 64-bit |
 | `doc-dl_linux.tar.gz` | 64-bit Linux |
 | `doc-dl_macos_x64.tar.gz` | Intel Mac |
 | `doc-dl_macos_arm64.tar.gz` | Apple Silicon Mac |
-| `SHA2-256SUMS` | SHA-256 checksums for every archive |
 
-Portable archives are larger than the Python wheel because they contain a
-matching Chromium browser. This is what lets browser-backed downloads work
-without asking the user to install anything else. Sizes of a few hundred
-megabytes are expected. During a workflow run, GitHub also displays temporary
-`build-bin-*` artifacts that transfer these archives between jobs; the final
-GitHub Release shows the public filenames in the table above.
+**Full** — everything in slim, plus Chromium already included, for offline use
+or locked-down networks. Noticeably larger.
+
+| Release file | System |
+| --- | --- |
+| `doc-dl_win_full.zip` | Windows 10 or newer, Intel or AMD 64-bit |
+| `doc-dl_linux_full.tar.gz` | 64-bit Linux |
+| `doc-dl_macos_x64_full.tar.gz` | Intel Mac |
+| `doc-dl_macos_arm64_full.tar.gz` | Apple Silicon Mac |
+
+`SHA2-256SUMS` in the same release lists SHA-256 checksums for every archive
+above, slim and full alike. During a workflow run, GitHub also displays
+temporary `build-bin-*` artifacts that transfer these archives between jobs;
+the final GitHub Release shows the public filenames in the tables above.
 
 ### Install from a Python wheel
 
@@ -124,22 +205,28 @@ Python users can keep using the smaller wheel:
 
 ```powershell
 python -m pip install .\dist\doc_dl-0.1.2-py3-none-any.whl
-python -m playwright install --no-shell chromium
 doc-dl doctor
 ```
 
-This method requires Python 3.11 or newer.
+This method requires Python 3.11 or newer. Chromium is not installed yet —
+`doc-dl` downloads it automatically the first time a browser-backed site needs
+it, or you can install it ahead of time with `doc-dl install-browser`.
 
 ### Install for development
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m playwright install --no-shell chromium
 .\.venv\Scripts\doc-dl.exe doctor
 ```
 
-On macOS and Linux, use `.venv/bin/python` and `.venv/bin/doc-dl` instead.
+On macOS and Linux, use `.venv/bin/python` and `.venv/bin/doc-dl` instead. To
+run the full test suite, including the browser-backed tests, also install
+Chromium once:
+
+```powershell
+.\.venv\Scripts\python.exe -m playwright install --no-shell chromium
+```
 
 If the virtual environment is not activated, call its executable directly:
 
@@ -219,14 +306,51 @@ unverified result is not promoted to the final output path.
 doc-dl version
 doc-dl providers
 doc-dl doctor
+doc-dl install-browser
+doc-dl uninstall-browser
 ```
 
-`doctor` checks Python, the required libraries, Chromium, and the writable
-application-state location. If Chromium is missing, run:
+`doctor` checks Python, the required libraries, whether Chromium is installed,
+and the writable application-state location. It reports Chromium's status but
+does not fail because of it: a missing Chromium is expected for a fresh slim
+install and is not a problem until a browser-backed site actually needs it.
+
+<a id="managing-the-chromium-browser-runtime"></a>
+
+## Managing the Chromium browser runtime
+
+You never have to think about Chromium for direct file downloads — those never
+touch a browser. The first time a browser-backed site does need one, `doc-dl`
+downloads Chromium automatically, shows progress, and reuses it for every
+download after that:
 
 ```powershell
-python -m playwright install --no-shell chromium
+doc-dl "https://example.com/some-javascript-viewer"
+# Chromium is not installed. Downloading the browser runtime now
+# (one-time download into C:\Users\you\AppData\Local\doc-dl\browsers)...
 ```
+
+To install it ahead of time instead of waiting for the first browser-backed
+download:
+
+```powershell
+doc-dl install-browser
+```
+
+To remove the downloaded browser runtime later and reclaim the disk space,
+without touching your sign-in profiles:
+
+```powershell
+doc-dl uninstall-browser
+```
+
+Chromium is stored in a stable per-user location (`doc-dl doctor` reports the
+exact path), never beside the installed program and never inside a release
+archive. `--no-browser` still skips browser escalation entirely, so it also
+skips this download. A full offline release already has Chromium bundled, so
+`install-browser` and `uninstall-browser` report it as already installed;
+`uninstall-browser` refuses to remove a bundled offline copy, since that would
+defeat the purpose of choosing the full build.
 
 ## Development checks
 
@@ -251,19 +375,29 @@ Before tagging, update the version in `pyproject.toml` and
 `src/doc_dl/__init__.py`, run the development checks, and commit the release
 changes. The tag should be the exact version without a `v` prefix.
 
-For a local portable build, install the build extras, place Chromium in a
-dedicated directory, and run the builder for the current operating system:
+For a local slim build, install the build extras and run the builder for the
+current operating system. `--variant slim` is the default, so it can be
+omitted:
+
+```powershell
+python -m pip install ".[build]"
+python scripts\build_portable.py --target windows-x64 --variant slim
+```
+
+For a local full build, also place Chromium in a dedicated directory first:
 
 ```powershell
 python -m pip install ".[build]"
 $env:PLAYWRIGHT_BROWSERS_PATH = "$PWD\build\playwright-browsers"
 python -m playwright install --no-shell chromium
-python scripts\build_portable.py --target windows-x64
+python scripts\build_portable.py --target windows-x64 --variant full
 ```
 
 The resulting archive is written to `release-assets/`. The builder runs both
 `doc-dl version` and `doc-dl doctor` against the frozen executable before it
-creates the archive.
+creates the archive; `doc-dl doctor` passing without Chromium is expected and
+required for a slim build. The GitHub Actions release workflow builds both
+variants for every platform in the same run.
 
 ## Provider support
 

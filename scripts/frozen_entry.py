@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from doc_dl.runtime import configure_bundled_runtime
+from doc_dl.runtime import configure_browsers_path
 
-configure_bundled_runtime()
+configure_browsers_path()
 
 from doc_dl.cli import main  # noqa: E402
 
