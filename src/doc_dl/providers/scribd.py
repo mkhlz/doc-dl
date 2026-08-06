@@ -8,7 +8,7 @@ from doc_dl.errors import DocDlError
 from doc_dl.providers.base import Provider
 
 _SCRIBD_DOCUMENT = re.compile(
-    r"^https?://(?:www\.)?scribd\.com/(?:document|doc)/(\d+)(?:/[^?#]*)?",
+    r"^https?://(?:www\.)?scribd\.com/(?:document|doc|presentation)/(\d+)(?:/[^?#]*)?",
     flags=re.IGNORECASE,
 )
 _SCRIBD_EMBED = re.compile(

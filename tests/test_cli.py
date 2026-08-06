@@ -70,6 +70,20 @@ def test_invalid_url_port_has_stable_error(capsys) -> None:
     assert payload["message"] == "The supplied URL has an invalid port"
 
 
+def test_unexpected_exception_is_reported_instead_of_crashing(monkeypatch, capsys) -> None:
+    def _boom(argv: object) -> int:
+        raise RuntimeError("Target page, context or browser has been closed")
+
+    monkeypatch.setattr("doc_dl.cli._run_download", _boom)
+
+    code = run(["--json", "https://example.com/document.pdf"])
+
+    assert code == 99
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["error"] == "internal_error"
+    assert payload["exit_code"] == 99
+
+
 def test_install_browser_reports_when_already_installed(monkeypatch, capsys) -> None:
     fake_executable = Path("/fake/chrome")
     monkeypatch.setattr("doc_dl.cli.is_chromium_installed", lambda: True)

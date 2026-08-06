@@ -29,11 +29,11 @@ verified file or get a clear reason why that was not possible.
 The portable release includes Python and every required library, so you do not
 need to install Python yourself. There are two kinds of release:
 
-- **Slim** (recommended) — small download. The first time you open a site that
+- **Slim** (recommended): small download. The first time you open a site that
   needs a browser to extract its document, `doc-dl` automatically downloads
   Chromium once and reuses it after that. Direct file downloads never need
   Chromium at all.
-- **Full** — a larger, offline-ready download with Chromium already included,
+- **Full**: a larger, offline-ready download with Chromium already included,
   for machines that are offline or on a locked-down network where an
   on-demand download would not work.
 
@@ -88,7 +88,7 @@ curl -fsSL https://raw.githubusercontent.com/mkhlz/doc-dl/master/scripts/uninsta
 
 Both commands preserve isolated sign-in profiles, any Chromium runtime
 `doc-dl` downloaded on demand, and other runtime state. To remove that state
-too — sign-in sessions and any downloaded Chromium runtime together — use one
+too (sign-in sessions and any downloaded Chromium runtime together), use one
 of these explicit commands:
 
 ```powershell
@@ -124,8 +124,8 @@ check the installation.
 
 Try these in PowerShell:
 
-- **W3C direct PDF**, quick smoke test — a plain file download, no browser
-  needed:
+- **W3C direct PDF**, quick smoke test (a plain file download, no browser
+  needed):
 
   ```powershell
   doc-dl "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
@@ -143,7 +143,7 @@ Try these in PowerShell:
   doc-dl "https://arxiv.org/pdf/2212.07286"
   ```
 
-- **Scribd multi-page viewer test** — this is the case that needs Chromium,
+- **Scribd multi-page viewer test**: this is the case that needs Chromium,
   so it is also a good way to see the one-time browser download in action on
   a fresh install:
 
@@ -173,7 +173,7 @@ Open the [GitHub Releases](https://github.com/mkhlz/doc-dl/releases) page and
 download the archive for your computer. Extract the `doc-dl` folder somewhere
 permanent and add that folder to `PATH`.
 
-**Slim (recommended)** — Python and every required library, but no Chromium.
+**Slim (recommended)**: Python and every required library, but no Chromium.
 The first browser-backed download triggers a one-time Chromium download; plain
 file downloads never need it.
 
@@ -184,7 +184,7 @@ file downloads never need it.
 | `doc-dl_macos_x64.tar.gz` | Intel Mac |
 | `doc-dl_macos_arm64.tar.gz` | Apple Silicon Mac |
 
-**Full** — everything in slim, plus Chromium already included, for offline use
+**Full**: everything in slim, plus Chromium already included, for offline use
 or locked-down networks. Noticeably larger.
 
 | Release file | System |
@@ -204,11 +204,11 @@ the final GitHub Release shows the public filenames in the tables above.
 Python users can keep using the smaller wheel:
 
 ```powershell
-python -m pip install .\dist\doc_dl-0.1.3-py3-none-any.whl
+python -m pip install .\dist\doc_dl-0.1.4-py3-none-any.whl
 doc-dl doctor
 ```
 
-This method requires Python 3.11 or newer. Chromium is not installed yet —
+This method requires Python 3.11 or newer. Chromium is not installed yet;
 `doc-dl` downloads it automatically the first time a browser-backed site needs
 it, or you can install it ahead of time with `doc-dl install-browser`.
 
@@ -319,7 +319,7 @@ install and is not a problem until a browser-backed site actually needs it.
 
 ## Managing the Chromium browser runtime
 
-You never have to think about Chromium for direct file downloads — those never
+You never have to think about Chromium for direct file downloads; those never
 touch a browser. The first time a browser-backed site does need one, `doc-dl`
 downloads Chromium automatically, shows progress, and reuses it for every
 download after that:

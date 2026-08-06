@@ -29,6 +29,7 @@ ERRORS: dict[str, ErrorSpec] = {
     "operation_timeout": ErrorSpec("operation_timeout", 52),
     "output_exists": ErrorSpec("output_exists", 70),
     "filesystem_failure": ErrorSpec("filesystem_failure", 71),
+    "internal_error": ErrorSpec("internal_error", 99),
 }
 
 

@@ -352,6 +352,20 @@ def run(argv: Sequence[str] | None = None) -> int:
         sink = sink or EventSink()
         sink.emit("error", error="interrupted", message="Operation interrupted", exit_code=130)
         return 130
+    except Exception as exc:
+        json_mode = "--json" in arguments
+        quiet = "--quiet" in arguments
+        verbose = "--verbose" in arguments or "-v" in arguments
+        sink = sink or EventSink(json_mode=json_mode, quiet=quiet, verbose=verbose)
+        sink.emit(
+            "error",
+            error="internal_error",
+            message="doc-dl hit an unexpected internal error",
+            detail=str(exc),
+            exit_code=99,
+            retryable=False,
+        )
+        return 99
 
 
 def main(argv: Sequence[str] | None = None) -> int:
