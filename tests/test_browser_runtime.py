@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import io
+import logging
 from pathlib import Path
 
+import doc_dl.browser as browser_module
 from doc_dl.browser import BrowserExtractor
 from doc_dl.config import StatePaths
 from doc_dl.events import EventSink
@@ -10,6 +12,11 @@ from doc_dl.events import EventSink
 
 def quiet_sink() -> EventSink:
     return EventSink(quiet=True, stream=io.StringIO(), error_stream=io.StringIO())
+
+
+def test_importing_browser_silences_asyncio_teardown_noise() -> None:
+    assert browser_module is not None
+    assert logging.getLogger("asyncio").level == logging.CRITICAL
 
 
 def test_ensure_chromium_skips_install_when_already_present(tmp_path: Path, monkeypatch) -> None:

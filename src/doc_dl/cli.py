@@ -33,6 +33,7 @@ COMMANDS = {
     "doctor",
     "install-browser",
     "uninstall-browser",
+    "clean",
     "version",
 }
 
@@ -132,6 +133,30 @@ def _uninstall_browser_parser() -> DocDlArgumentParser:
     parser = DocDlArgumentParser(
         prog="doc-dl uninstall-browser",
         description="Remove the Chromium browser runtime downloaded by doc-dl",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Delete without an interactive prompt",
+    )
+    _add_output_modes(parser)
+    return parser
+
+
+def _clean_parser() -> DocDlArgumentParser:
+    parser = DocDlArgumentParser(
+        prog="doc-dl clean",
+        description=(
+            "Remove orphaned .doc-dl-*.part partial-download files left behind "
+            "by interrupted or failed downloads"
+        ),
+    )
+    parser.add_argument(
+        "directory",
+        nargs="?",
+        type=Path,
+        default=Path.cwd(),
+        help="Directory to scan (defaults to the current directory)",
     )
     parser.add_argument(
         "--yes",
@@ -299,6 +324,48 @@ def _run_uninstall_browser(argv: Sequence[str]) -> int:
     return 0
 
 
+def _orphaned_partial_files(directory: Path) -> list[Path]:
+    found = set(directory.glob(".doc-dl-*.part")) | set(directory.glob(".doc-dl-*.part.json"))
+    return sorted(found)
+
+
+def _run_clean(argv: Sequence[str]) -> int:
+    args = _clean_parser().parse_args(list(argv))
+    sink = _sink_from_args(args)
+    directory = args.directory.expanduser().resolve()
+    orphans = _orphaned_partial_files(directory)
+    if not orphans:
+        if not args.quiet:
+            print(f"No leftover .doc-dl-*.part files were found in {directory}.")
+        return 0
+
+    total_size = sum(path.stat().st_size for path in orphans if path.exists())
+    if not args.yes:
+        if not args.quiet:
+            print(f"Found {len(orphans)} leftover file(s) in {directory} ({total_size} bytes):")
+            for path in orphans:
+                print(f"  {path.name}")
+        answer = input("Delete these files? [y/N] ")
+        if answer.strip().casefold() not in {"y", "yes"}:
+            if not args.quiet:
+                print("No files were deleted.")
+            return 0
+
+    removed = 0
+    for path in orphans:
+        try:
+            path.unlink(missing_ok=True)
+            removed += 1
+        except OSError:
+            continue
+    sink.emit(
+        "complete",
+        message=f"Removed {removed} leftover file(s) from {directory}",
+        path=str(directory),
+    )
+    return 0
+
+
 def _print_bare_invocation_help() -> None:
     safe_print(_download_parser().format_help().rstrip(), file=sys.stdout)
     safe_print("", file=sys.stdout)
@@ -330,6 +397,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             return _run_install_browser(command_args)
         if command == "uninstall-browser":
             return _run_uninstall_browser(command_args)
+        if command == "clean":
+            return _run_clean(command_args)
         if command == "version":
             print(f"doc-dl {__version__}")
             return 0

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import tempfile
 import time
@@ -23,6 +24,14 @@ from doc_dl.runtime import configure_browsers_path, install_chromium, is_chromiu
 from doc_dl.verify import base_media_type, response_looks_document_like
 
 _DOWNLOAD_TEXT = re.compile(r"\b(download|export|save\s+(?:as|file|pdf)|get\s+pdf)\b", re.I)
+
+# Playwright's sync API drives an asyncio connection on a background thread.
+# When that thread's event loop tears down, pending Task/Future objects log a
+# "Task was destroyed but it is pending!" warning through the stdlib asyncio
+# logger. It is a known, harmless artifact of the sync-over-async bridge
+# (reproduces even on a fully successful run) and confuses users into
+# thinking the browser crashed, so it is silenced here.
+logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 
 
 class BrowserExtractor:

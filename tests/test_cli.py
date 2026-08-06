@@ -133,6 +133,39 @@ def test_uninstall_browser_removes_with_yes_flag(tmp_path: Path, monkeypatch, ca
     assert "Removed" in capsys.readouterr().out
 
 
+def test_clean_reports_no_files_when_directory_is_empty(tmp_path: Path, capsys) -> None:
+    code = run(["clean", str(tmp_path), "--yes"])
+
+    assert code == 0
+    assert "No leftover" in capsys.readouterr().out
+
+
+def test_clean_removes_orphaned_partial_files_with_yes_flag(tmp_path: Path, capsys) -> None:
+    part = tmp_path / ".doc-dl-abc123.part"
+    sidecar = tmp_path / ".doc-dl-abc123.part.json"
+    part.write_bytes(b"partial")
+    sidecar.write_text("{}", encoding="utf-8")
+
+    code = run(["clean", str(tmp_path), "--yes"])
+
+    assert code == 0
+    assert not part.exists()
+    assert not sidecar.exists()
+    assert "Removed 2" in capsys.readouterr().out
+
+
+def test_clean_prompts_and_respects_decline(tmp_path: Path, monkeypatch, capsys) -> None:
+    part = tmp_path / ".doc-dl-abc123.part"
+    part.write_bytes(b"partial")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+
+    code = run(["clean", str(tmp_path)])
+
+    assert code == 0
+    assert part.exists()
+    assert "No files were deleted." in capsys.readouterr().out
+
+
 def test_uninstall_browser_reports_nothing_to_remove(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("DOC_DL_STATE_DIR", str(tmp_path / "state"))
     target = tmp_path / "state" / "browsers"
