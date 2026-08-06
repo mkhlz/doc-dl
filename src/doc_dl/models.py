@@ -81,6 +81,15 @@ class DownloadResult:
     strategies: list[StrategyRecord] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class ImagePageSet:
+    """A document reconstructable by fetching one already-known image URL
+    per page directly, with no browser involved (e.g. SlideShare slides)."""
+
+    title: str | None
+    image_urls: list[str]
+
+
 @dataclass(slots=True)
 class BrowserDiscovery:
     candidates: list[DocumentCandidate] = field(default_factory=list)

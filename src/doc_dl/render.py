@@ -29,6 +29,97 @@ class RenderedArtifact:
     page_count: int
 
 
+def temporary_pdf_path() -> Path:
+    with tempfile.NamedTemporaryFile(
+        prefix="doc-dl-render-", suffix=".pdf", delete=False
+    ) as handle:
+        path = Path(handle.name)
+    path.unlink(missing_ok=True)
+    return path
+
+
+def write_image_page_pdf(image_bytes: bytes, output: Path) -> None:
+    """Encode one page image (screenshot or directly-fetched) as a
+    single-page PDF, rejecting anything too small or visually blank."""
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            source.load()
+            if source.width < 10 or source.height < 10:
+                raise DocDlError(
+                    "render_incomplete",
+                    "A viewer page has invalid dimensions",
+                )
+
+            thumbnail = source.convert("RGB")
+            thumbnail.thumbnail((256, 256), Image.Resampling.LANCZOS)
+            gray = thumbnail.convert("L")
+            histogram = gray.histogram()
+            pixel_count = max(1, thumbnail.width * thumbnail.height)
+            nonwhite_ratio = sum(histogram[:245]) / pixel_count
+            brightness_stddev = float(ImageStat.Stat(gray).stddev[0])
+            brightness_mean = float(ImageStat.Stat(gray).mean[0])
+            if nonwhite_ratio < 0.001 and brightness_stddev < 0.5 and brightness_mean > 245:
+                raise DocDlError(
+                    "render_incomplete",
+                    "A captured viewer page is visually blank",
+                )
+
+            if "A" in source.getbands():
+                image = Image.new("RGB", source.size, "white")
+                image.paste(source.convert("RGB"), mask=source.getchannel("A"))
+            else:
+                image = source.convert("RGB")
+            image.save(
+                output,
+                format="PDF",
+                resolution=96.0,
+                quality=92,
+                optimize=True,
+            )
+    except DocDlError:
+        raise
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise DocDlError(
+            "render_incomplete",
+            "A captured viewer page could not be encoded as PDF",
+            detail=str(exc),
+        ) from exc
+
+
+def append_single_page(writer: PdfWriter, path: Path, page_number: int) -> None:
+    try:
+        reader = PdfReader(io.BytesIO(path.read_bytes()), strict=False)
+    except Exception as exc:
+        raise DocDlError(
+            "corrupt_document",
+            f"Rendered page {page_number} is not a valid PDF",
+            detail=str(exc),
+        ) from exc
+    if len(reader.pages) != 1:
+        raise DocDlError(
+            "render_incomplete",
+            f"Rendered document page {page_number} produced {len(reader.pages)} PDF sheets",
+        )
+    if len(reader.pages[0].images) < 1:
+        raise DocDlError(
+            "render_incomplete",
+            f"Rendered document page {page_number} contains no visible image content",
+        )
+    writer.add_page(reader.pages[0])
+
+
+def write_merged_pdf(writer: PdfWriter, output: Path) -> None:
+    try:
+        with output.open("wb") as handle:
+            writer.write(handle)
+    except OSError as exc:
+        raise DocDlError(
+            "filesystem_failure",
+            "The reconstructed PDF could not be written",
+            detail=str(exc),
+        ) from exc
+
+
 class PdfRenderer:
     def __init__(self, sink: EventSink) -> None:
         self.sink = sink
@@ -40,7 +131,7 @@ class PdfRenderer:
         *,
         timeout_ms: float,
     ) -> RenderedArtifact:
-        output = self._temporary_pdf()
+        output = temporary_pdf_path()
         try:
             if provider.name != "generic":
                 page_numbers = provider.render_page_numbers(page)
@@ -108,7 +199,7 @@ class PdfRenderer:
                         page_file,
                         timeout_ms,
                     )
-                    self._append_single_page(writer, page_file, page_number)
+                    append_single_page(writer, page_file, page_number)
                     self.sink.emit(
                         "download_progress",
                         message=f"Completed page {index}/{len(page_numbers)}",
@@ -118,7 +209,7 @@ class PdfRenderer:
                     )
                 finally:
                     provider.release_render_page(page, page_number)
-            self._write_merged(writer, output)
+            write_merged_pdf(writer, output)
 
         verify_document(output, media_type_hint="application/pdf", expected_pages=len(page_numbers))
         return len(page_numbers)
@@ -149,8 +240,8 @@ class PdfRenderer:
                 target = locator.nth(index)
                 page_file = spool_path / f"page-{index + 1:06d}.pdf"
                 self._capture_element_pdf(page, target, page_file, timeout_ms)
-                self._append_single_page(writer, page_file, index + 1)
-            self._write_merged(writer, output)
+                append_single_page(writer, page_file, index + 1)
+            write_merged_pdf(writer, output)
 
         verify_document(output, media_type_hint="application/pdf", expected_pages=count)
         return count
@@ -198,7 +289,7 @@ class PdfRenderer:
         finally:
             if original_viewport is not None and self._viewport_size(page) != original_viewport:
                 page.set_viewport_size(original_viewport)
-        self._write_screenshot_pdf(png, output)
+        write_image_page_pdf(png, output)
 
     @staticmethod
     def _viewport_size(page: Any) -> dict[str, int] | None:
@@ -279,52 +370,6 @@ class PdfRenderer:
             )
 
     @staticmethod
-    def _write_screenshot_pdf(png: bytes, output: Path) -> None:
-        try:
-            with Image.open(io.BytesIO(png)) as source:
-                source.load()
-                if source.width < 10 or source.height < 10:
-                    raise DocDlError(
-                        "render_incomplete",
-                        "A viewer page has invalid dimensions",
-                    )
-
-                thumbnail = source.convert("RGB")
-                thumbnail.thumbnail((256, 256), Image.Resampling.LANCZOS)
-                gray = thumbnail.convert("L")
-                histogram = gray.histogram()
-                pixel_count = max(1, thumbnail.width * thumbnail.height)
-                nonwhite_ratio = sum(histogram[:245]) / pixel_count
-                brightness_stddev = float(ImageStat.Stat(gray).stddev[0])
-                brightness_mean = float(ImageStat.Stat(gray).mean[0])
-                if nonwhite_ratio < 0.001 and brightness_stddev < 0.5 and brightness_mean > 245:
-                    raise DocDlError(
-                        "render_incomplete",
-                        "A captured viewer page is visually blank",
-                    )
-
-                if "A" in source.getbands():
-                    image = Image.new("RGB", source.size, "white")
-                    image.paste(source.convert("RGB"), mask=source.getchannel("A"))
-                else:
-                    image = source.convert("RGB")
-                image.save(
-                    output,
-                    format="PDF",
-                    resolution=96.0,
-                    quality=92,
-                    optimize=True,
-                )
-        except DocDlError:
-            raise
-        except (OSError, UnidentifiedImageError, ValueError) as exc:
-            raise DocDlError(
-                "render_incomplete",
-                "A captured viewer page could not be encoded as PDF",
-                detail=str(exc),
-            ) from exc
-
-    @staticmethod
     def _wait_for_images(locator: Any, timeout_ms: float) -> None:
         try:
             locator.evaluate(
@@ -360,46 +405,3 @@ class PdfRenderer:
             if page.locator(selector).count() > 0:
                 return selector
         return None
-
-    @staticmethod
-    def _append_single_page(writer: PdfWriter, path: Path, page_number: int) -> None:
-        try:
-            reader = PdfReader(io.BytesIO(path.read_bytes()), strict=False)
-        except Exception as exc:
-            raise DocDlError(
-                "corrupt_document",
-                f"Rendered page {page_number} is not a valid PDF",
-                detail=str(exc),
-            ) from exc
-        if len(reader.pages) != 1:
-            raise DocDlError(
-                "render_incomplete",
-                f"Rendered document page {page_number} produced {len(reader.pages)} PDF sheets",
-            )
-        if len(reader.pages[0].images) < 1:
-            raise DocDlError(
-                "render_incomplete",
-                f"Rendered document page {page_number} contains no visible image content",
-            )
-        writer.add_page(reader.pages[0])
-
-    @staticmethod
-    def _write_merged(writer: PdfWriter, output: Path) -> None:
-        try:
-            with output.open("wb") as handle:
-                writer.write(handle)
-        except OSError as exc:
-            raise DocDlError(
-                "filesystem_failure",
-                "The reconstructed PDF could not be written",
-                detail=str(exc),
-            ) from exc
-
-    @staticmethod
-    def _temporary_pdf() -> Path:
-        with tempfile.NamedTemporaryFile(
-            prefix="doc-dl-render-", suffix=".pdf", delete=False
-        ) as handle:
-            path = Path(handle.name)
-        path.unlink(missing_ok=True)
-        return path

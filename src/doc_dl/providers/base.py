@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from doc_dl.models import ImagePageSet
+
 
 class Provider:
     name = "generic"
@@ -28,6 +30,14 @@ class Provider:
 
     def activate(self, page: Any, timeout_ms: float) -> None:
         del page, timeout_ms
+
+    def image_pages_from_html(self, html: str, url: str) -> ImagePageSet | None:
+        """A title and ordered list of full-resolution page image URLs
+        parsed directly from a fetched landing page, needing no browser at
+        all. Return None if this provider has no such static reconstruction
+        for the given page."""
+        del html, url
+        return None
 
     def render_page_numbers(self, page: Any) -> list[int]:
         del page

@@ -12,6 +12,7 @@ from doc_dl.errors import DocDlError
 from doc_dl.events import EventSink
 from doc_dl.filenames import apply_filename_template, resolve_output_path, sanitize_filename
 from doc_dl.http import HttpDownloader, LandingPage, RetrievedDocument
+from doc_dl.imageset import ImageSetReconstructor
 from doc_dl.models import (
     CandidateKind,
     DocumentCandidate,
@@ -113,6 +114,13 @@ class DownloadEngine:
                     started,
                     Provenance.ORIGINAL,
                 )
+
+        if not request.original_only and request.allow_render:
+            image_result = self._attempt_image_reconstruction(
+                provider, landing_pages, request, records, started
+            )
+            if image_result:
+                return image_result
 
         if not request.browser_enabled:
             raise DocDlError(
@@ -297,6 +305,54 @@ class DownloadEngine:
             self._elapsed(started),
         )
         return result
+
+    def _attempt_image_reconstruction(
+        self,
+        provider: Provider,
+        landing_pages: list[LandingPage],
+        request: DownloadRequest,
+        records: list[StrategyRecord],
+        started: float,
+    ) -> DownloadResult | None:
+        for landing in landing_pages:
+            image_set = provider.image_pages_from_html(landing.html, landing.url)
+            if not image_set or not image_set.image_urls:
+                continue
+            reconstruct_started = time.monotonic()
+            try:
+                local_path, page_count = ImageSetReconstructor(self.sink).reconstruct(
+                    image_set, request.timeout_seconds
+                )
+            except DocDlError as exc:
+                self._record(
+                    records,
+                    "image-reconstruction",
+                    StrategyStatus.FAILED,
+                    exc.identifier,
+                    exc.message,
+                    self._elapsed(reconstruct_started),
+                )
+                return None
+            self._record(
+                records,
+                "image-reconstruction",
+                StrategyStatus.SUCCEEDED,
+                "reconstructed",
+                f"Reconstructed {page_count} page(s) from known page image URLs",
+                self._elapsed(reconstruct_started),
+            )
+            return self._commit_local_artifact(
+                local_path,
+                image_set.title or "document",
+                "application/pdf",
+                request,
+                provider,
+                records,
+                started,
+                Provenance.RECONSTRUCTED,
+                expected_pages=page_count,
+            )
+        return None
 
     def _finish_http(
         self,

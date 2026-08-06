@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 from pypdf import PdfReader
 
 from doc_dl.errors import DocDlError
-from doc_dl.render import PdfRenderer
+from doc_dl.render import PdfRenderer, write_image_page_pdf
 
 
 class FakePage:
@@ -76,7 +76,7 @@ def make_png(*, visible_content: bool) -> bytes:
 
 def test_screenshot_pdf_rejects_visually_blank_page(tmp_path: Path) -> None:
     with pytest.raises(DocDlError) as raised:
-        PdfRenderer._write_screenshot_pdf(
+        write_image_page_pdf(
             make_png(visible_content=False),
             tmp_path / "blank.pdf",
         )
@@ -86,7 +86,7 @@ def test_screenshot_pdf_rejects_visually_blank_page(tmp_path: Path) -> None:
 
 def test_screenshot_pdf_contains_visible_image_page(tmp_path: Path) -> None:
     output = tmp_path / "content.pdf"
-    PdfRenderer._write_screenshot_pdf(make_png(visible_content=True), output)
+    write_image_page_pdf(make_png(visible_content=True), output)
     reader = PdfReader(str(output), strict=False)
     assert len(reader.pages) == 1
     assert len(reader.pages[0].images) == 1

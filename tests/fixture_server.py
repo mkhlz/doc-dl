@@ -10,9 +10,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from PIL import Image
 from pypdf import PdfWriter
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
+
+
+def make_jpeg(*, color: str = "blue") -> bytes:
+    output = io.BytesIO()
+    Image.new("RGB", (200, 260), color).save(output, format="JPEG")
+    return output.getvalue()
 
 
 def make_pdf(*, padding: int = 0) -> bytes:
@@ -52,6 +59,7 @@ def make_docx() -> bytes:
 PDF_BYTES = make_pdf()
 RESUME_PDF_BYTES = make_pdf(padding=400_000)
 DOCX_BYTES = make_docx()
+JPEG_BYTES = make_jpeg()
 
 
 class FixtureState:
@@ -155,6 +163,12 @@ class FixtureHandler(BaseHTTPRequestHandler):
             return
         if path == "/errors/corrupt.pdf":
             self._send_bytes(200, b"%PDF-1.7\nthis is not a complete PDF", "application/pdf")
+            return
+        if path.startswith("/imageset/pages/") and path.endswith(".jpg"):
+            self._send_bytes(200, JPEG_BYTES, "image/jpeg")
+            return
+        if path == "/imageset/missing-page.jpg":
+            self._send_bytes(404, b"not found", "text/plain")
             return
         self._send_bytes(404, b"not found", "text/plain")
 

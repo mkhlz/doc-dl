@@ -204,7 +204,7 @@ the final GitHub Release shows the public filenames in the tables above.
 Python users can keep using the smaller wheel:
 
 ```powershell
-python -m pip install .\dist\doc_dl-0.1.6-py3-none-any.whl
+python -m pip install .\dist\doc_dl-0.1.7-py3-none-any.whl
 doc-dl doctor
 ```
 
@@ -405,6 +405,8 @@ variants for every platform in the same run.
   downloads, document responses, and compatible viewer reconstruction.
 - `scribd`: normalized document URLs, isolated login profiles, embedded viewer
   activation, lazy page loading, and complete-page PDF reconstruction.
+- `slideshare`: presentation slide URLs parsed directly from the page, no
+  browser required; every slide is fetched and merged into one PDF.
 
 Websites can change their layouts or restrict access. In those cases,
 `doc-dl` returns a stable error and leaves no unverified final file behind.

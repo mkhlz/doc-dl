@@ -32,7 +32,7 @@ def test_version_command(capsys) -> None:
 def test_provider_listing_json(capsys) -> None:
     assert run(["providers", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert {item["name"] for item in payload["providers"]} == {"generic", "scribd"}
+    assert {item["name"] for item in payload["providers"]} == {"generic", "scribd", "slideshare"}
 
 
 def test_powershell_url_form_downloads_document(

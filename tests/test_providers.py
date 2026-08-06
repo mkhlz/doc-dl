@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from doc_dl.config import StatePaths
 from doc_dl.errors import DocDlError
 from doc_dl.providers.registry import ProviderRegistry
 from doc_dl.providers.scribd import ScribdProvider, _clean_scribd_title
+from doc_dl.providers.slideshare import SlideShareProvider
 
 
 def test_scribd_provider_normalizes_both_url_styles() -> None:
@@ -110,3 +113,70 @@ def test_profile_name_cannot_escape_state_root(tmp_path) -> None:
     with pytest.raises(DocDlError) as raised:
         paths.profile("scribd", "../../escape")
     assert raised.value.identifier == "invalid_arguments"
+
+
+def _slideshare_html(*, total_slides: int = 3) -> str:
+    payload = {
+        "props": {
+            "pageProps": {
+                "slideshow": {
+                    "title": "Sample Deck",
+                    "totalSlides": total_slides,
+                    "slides": {
+                        "host": "https://image.slidesharecdn.com",
+                        "imageLocation": "abc123-deadbeef",
+                        "title": "Sample-Deck",
+                        "imageSizes": [
+                            {"quality": 85, "width": 320, "format": "jpg"},
+                            {"quality": 85, "width": 638, "format": "jpg"},
+                            {"quality": 75, "width": 2048, "format": "webp"},
+                        ],
+                    },
+                }
+            }
+        }
+    }
+    return f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(payload)}</script>'
+
+
+def test_slideshare_matches_slideshare_urls() -> None:
+    provider = SlideShareProvider()
+    assert provider.match("https://www.slideshare.net/slideshow/deck/123") == 100
+    assert provider.match("https://example.com/not-slideshare") == 0
+
+
+def test_slideshare_parses_image_pages_from_next_data() -> None:
+    provider = SlideShareProvider()
+    image_set = provider.image_pages_from_html(_slideshare_html(total_slides=3), "https://x")
+
+    assert image_set is not None
+    assert image_set.title == "Sample Deck"
+    assert image_set.image_urls == [
+        "https://image.slidesharecdn.com/abc123-deadbeef/75/Sample-Deck-1-2048.jpg",
+        "https://image.slidesharecdn.com/abc123-deadbeef/75/Sample-Deck-2-2048.jpg",
+        "https://image.slidesharecdn.com/abc123-deadbeef/75/Sample-Deck-3-2048.jpg",
+    ]
+
+
+def test_slideshare_picks_largest_available_width() -> None:
+    provider = SlideShareProvider()
+    image_set = provider.image_pages_from_html(_slideshare_html(total_slides=1), "https://x")
+
+    assert image_set.image_urls[0].endswith("-2048.jpg")
+
+
+def test_slideshare_returns_none_without_next_data() -> None:
+    provider = SlideShareProvider()
+    html = "<html><body>no data here</body></html>"
+    assert provider.image_pages_from_html(html, "https://x") is None
+
+
+def test_slideshare_returns_none_for_malformed_json() -> None:
+    provider = SlideShareProvider()
+    html = '<script id="__NEXT_DATA__" type="application/json">{not valid json</script>'
+    assert provider.image_pages_from_html(html, "https://x") is None
+
+
+def test_registry_selects_slideshare_over_generic() -> None:
+    provider = ProviderRegistry().select("https://www.slideshare.net/slideshow/deck/123")
+    assert provider.name == "slideshare"
