@@ -160,6 +160,14 @@ class ScribdProvider(Provider):
                     hasLoadedImage || hasPopulatedSvg || hasCanvas || textLength >= 20
                   );
                   if (imagesReady && hasContent) {
+                    // Scribd's scroll-virtualized viewer only flips a page's
+                    // container out of `display: none` once its own internal
+                    // scroll-position tracking considers it visible, which
+                    // never happens for pages we jump to programmatically.
+                    // The content above is already confirmed loaded, so force
+                    // the container visible ourselves rather than waiting on
+                    // that tracking to catch up.
+                    target.style.setProperty('display', 'block', 'important');
                     if (!target.id) target.id = `doc_dl_outer_page_${pageNumber}`;
                     const outerSelector = `#${CSS.escape(target.id)}`;
                     const selector = contentRoot === target

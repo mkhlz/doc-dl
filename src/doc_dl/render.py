@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import math
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from doc_dl.verify import verify_document
 
 _CAPTURE_VIEWPORT_MARGIN = 128
 _MAX_CAPTURE_VIEWPORT_HEIGHT = 16_384
+_MEASURE_RETRY_BUDGET_MS = 2_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,7 +166,11 @@ class PdfRenderer:
         page.emulate_media(media="screen")
         original_viewport = self._viewport_size(page)
         try:
-            self._fit_viewport_to_target(page, target, original_viewport)
+            # Scroll-virtualized viewers (Scribd's included) can leave an
+            # "attached" page as an empty placeholder with no layout until it
+            # is actually scrolled into view, so do that before measuring it.
+            target.scroll_into_view_if_needed(timeout=timeout_ms)
+            self._fit_viewport_to_target(page, target, original_viewport, timeout_ms)
             target.scroll_into_view_if_needed(timeout=timeout_ms)
             self._wait_for_images(target, timeout_ms)
             page.evaluate(
@@ -205,22 +211,40 @@ class PdfRenderer:
         }
 
     @staticmethod
+    def _measure_target(
+        page: Any,
+        target: Any,
+        timeout_ms: float,
+    ) -> dict[str, float]:
+        """Read a bounding box, tolerating the brief window where a
+        scroll-virtualized viewer has scrolled an element into view but not
+        yet finished laying it out."""
+        deadline = time.monotonic() + min(timeout_ms, _MEASURE_RETRY_BUDGET_MS) / 1000
+        box = target.bounding_box()
+        while box is None and time.monotonic() < deadline:
+            page.wait_for_timeout(150)
+            box = target.bounding_box()
+        if box is None:
+            raise DocDlError(
+                "render_incomplete",
+                "A viewer page has no measurable dimensions",
+            )
+        return box
+
+    @classmethod
     def _fit_viewport_to_target(
+        cls,
         page: Any,
         target: Any,
         original_viewport: dict[str, int] | None,
+        timeout_ms: float,
     ) -> None:
         if original_viewport is None:
             return
 
         current_height = original_viewport["height"]
         for _ in range(3):
-            box = target.bounding_box()
-            if box is None:
-                raise DocDlError(
-                    "render_incomplete",
-                    "A viewer page has no measurable dimensions",
-                )
+            box = cls._measure_target(page, target, timeout_ms)
             required_height = max(
                 original_viewport["height"],
                 math.ceil(float(box["height"])) + _CAPTURE_VIEWPORT_MARGIN,
@@ -244,11 +268,11 @@ class PdfRenderer:
             )
             current_height = required_height
 
-        box = target.bounding_box()
-        target_exceeds_viewport = box is not None and (
+        box = cls._measure_target(page, target, timeout_ms)
+        target_exceeds_viewport = (
             math.ceil(float(box["height"])) + _CAPTURE_VIEWPORT_MARGIN > current_height
         )
-        if box is None or target_exceeds_viewport:
+        if target_exceeds_viewport:
             raise DocDlError(
                 "render_incomplete",
                 "A viewer page did not stabilize within the capture viewport",

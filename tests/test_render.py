@@ -15,21 +15,28 @@ class FakePage:
     def __init__(self, viewport: dict[str, int]) -> None:
         self.viewport_size = dict(viewport)
         self.viewport_changes: list[dict[str, int]] = []
+        self.waited_for_timeout = 0
 
     def set_viewport_size(self, viewport: dict[str, int]) -> None:
         self.viewport_size = dict(viewport)
         self.viewport_changes.append(dict(viewport))
 
+    def wait_for_timeout(self, _timeout: float) -> None:
+        self.waited_for_timeout += 1
+
 
 class FakeTarget:
-    def __init__(self, heights: list[float]) -> None:
+    def __init__(self, heights: list[float | None]) -> None:
         self.heights = list(heights)
         self.index = 0
 
-    def bounding_box(self) -> dict[str, float]:
+    def bounding_box(self) -> dict[str, float] | None:
         index = min(self.index, len(self.heights) - 1)
         self.index += 1
-        return {"x": 0.0, "y": 0.0, "width": 800.0, "height": self.heights[index]}
+        height = self.heights[index]
+        if height is None:
+            return None
+        return {"x": 0.0, "y": 0.0, "width": 800.0, "height": height}
 
 
 class FakeCapturePage(FakePage):
@@ -90,7 +97,7 @@ def test_capture_viewport_grows_until_tall_page_fits() -> None:
     target = FakeTarget([1412.4, 1412.4])
     original = PdfRenderer._viewport_size(page)
 
-    PdfRenderer._fit_viewport_to_target(page, target, original)
+    PdfRenderer._fit_viewport_to_target(page, target, original, 5_000)
 
     assert original == {"width": 1440, "height": 1000}
     assert page.viewport_size == {"width": 1440, "height": 1541}
@@ -105,6 +112,7 @@ def test_capture_viewport_handles_responsive_height_change() -> None:
         page,
         target,
         PdfRenderer._viewport_size(page),
+        5_000,
     )
 
     assert page.viewport_size == {"width": 1440, "height": 1628}
@@ -123,10 +131,59 @@ def test_capture_viewport_rejects_unsafe_height() -> None:
             page,
             target,
             PdfRenderer._viewport_size(page),
+            5_000,
         )
 
     assert raised.value.identifier == "render_incomplete"
     assert "safe capture height" in raised.value.message
+
+
+def test_measure_target_tolerates_a_brief_unmeasurable_window() -> None:
+    page = FakePage({"width": 1440, "height": 1000})
+    target = FakeTarget([None, None, 1412.4])
+
+    box = PdfRenderer._measure_target(page, target, 5_000)
+
+    assert box["height"] == 1412.4
+    assert page.waited_for_timeout == 2
+
+
+def test_measure_target_raises_when_never_measurable() -> None:
+    page = FakePage({"width": 1440, "height": 1000})
+    target = FakeTarget([None])
+
+    with pytest.raises(DocDlError) as raised:
+        PdfRenderer._measure_target(page, target, 100)
+
+    assert raised.value.identifier == "render_incomplete"
+    assert "no measurable dimensions" in raised.value.message
+
+
+def test_capture_scrolls_into_view_before_measuring_dimensions(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    class OrderTrackingTarget(FakeCaptureTarget):
+        def scroll_into_view_if_needed(self, *, timeout: float) -> None:
+            calls.append("scroll")
+            super().scroll_into_view_if_needed(timeout=timeout)
+
+        def bounding_box(self) -> dict[str, float] | None:
+            calls.append("measure")
+            return super().bounding_box()
+
+    page = FakeCapturePage({"width": 1440, "height": 1000})
+    target = OrderTrackingTarget([1412.4, 1412.4])
+
+    PdfRenderer._capture_element_pdf(
+        PdfRenderer.__new__(PdfRenderer),
+        page,
+        target,
+        tmp_path / "captured.pdf",
+        5_000,
+    )
+
+    assert calls[0] == "scroll"
+    assert calls.index("scroll") < calls.index("measure")
 
 
 def test_element_capture_restores_original_viewport(tmp_path: Path) -> None:
