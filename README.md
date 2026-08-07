@@ -4,7 +4,7 @@
 
 [![Release version](https://img.shields.io/github/v/release/mkhlz/doc-dl?color=brightgreen&label=Latest&style=for-the-badge)](#installation "Installation")
 [![Python Version](https://img.shields.io/badge/python-%3E%3D3.11-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://github.com/mkhlz/doc-dl/blob/master/pyproject.toml "Python Version")
-[![Providers](https://img.shields.io/badge/providers-4-9cf.svg?style=for-the-badge)](#provider-support "Provider support")
+[![Providers](https://img.shields.io/badge/providers-6-9cf.svg?style=for-the-badge)](#provider-support "Provider support")
 [![License: Non-Commercial](https://img.shields.io/badge/license-Non--Commercial-orange.svg?style=for-the-badge)](LICENSE "License")
 [![Commits](https://img.shields.io/github/commit-activity/m/mkhlz/doc-dl?label=commits&style=for-the-badge)](https://github.com/mkhlz/doc-dl/commits "Commit History")
 
@@ -459,6 +459,10 @@ variants for every platform in the same run.
   browser required; every slide is fetched and merged into one PDF.
 - `googledrive`: shared file links resolved to Drive's own download endpoint,
   preserving the resource key that older shared links require.
+- `dropbox`: share links resolved to the file itself rather than the preview
+  page, keeping the access key newer links carry.
+- `onedrive`: personal share links resolved through OneDrive's public shares
+  endpoint. Business and SharePoint links are not rewritten.
 
 Websites can change their layouts or restrict access. In those cases,
 `doc-dl` returns a stable error and leaves no unverified final file behind.

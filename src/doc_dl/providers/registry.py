@@ -4,8 +4,10 @@ from collections.abc import Iterable
 
 from doc_dl.errors import DocDlError
 from doc_dl.providers.base import Provider
+from doc_dl.providers.dropbox import DropboxProvider
 from doc_dl.providers.generic import GenericProvider
 from doc_dl.providers.googledrive import GoogleDriveProvider
+from doc_dl.providers.onedrive import OneDriveProvider
 from doc_dl.providers.scribd import ScribdProvider
 from doc_dl.providers.slideshare import SlideShareProvider
 
@@ -18,6 +20,8 @@ class ProviderRegistry:
                 ScribdProvider(),
                 SlideShareProvider(),
                 GoogleDriveProvider(),
+                DropboxProvider(),
+                OneDriveProvider(),
                 GenericProvider(),
             ]
         )

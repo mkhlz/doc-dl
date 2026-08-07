@@ -37,6 +37,8 @@ def test_provider_listing_json(capsys) -> None:
         "scribd",
         "slideshare",
         "googledrive",
+        "dropbox",
+        "onedrive",
     }
 
 

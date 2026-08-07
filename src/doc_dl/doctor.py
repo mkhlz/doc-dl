@@ -46,7 +46,7 @@ def run_doctor(state: StatePaths | None = None) -> list[DoctorCheck]:
             DoctorCheck(
                 "chromium",
                 False,
-                "not installed — run 'doc-dl install-browser', or it installs "
+                "not installed; run 'doc-dl install-browser', or it installs "
                 "automatically the first time a browser-backed site needs it",
                 required=False,
             )

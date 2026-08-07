@@ -15,10 +15,7 @@ smoke-output/
 tmp/
 
 # Private project material and locally downloaded documents.
-# docs/* rather than docs/ so a single file below can be re-included: git
-# cannot re-include anything whose parent directory is itself excluded.
-docs/*
-!docs/ISSUES.md
+docs/
 PROJECT.txt
 downloads/
 output/
