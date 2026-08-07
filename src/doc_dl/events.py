@@ -1,83 +1,42 @@
 from __future__ import annotations
 
-import ctypes
 import json
-import os
 import sys
+import time
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, TextIO
 
+from doc_dl.errors import Severity, remedy_for, severity_of
 from doc_dl.redaction import redact_headers, redact_url
+from doc_dl.ui import (
+    BOLD,
+    CLEAR_LINE,
+    CYAN,
+    DIM,
+    GREEN,
+    MAGENTA,
+    RESET,
+    YELLOW,
+    Glyphs,
+    Spinner,
+    elapsed_since,
+    env_disables_color,
+    format_bytes,
+    format_rate,
+    render_bar,
+    stream_handles_unicode,
+    windows_ansi_enabled,
+)
+from doc_dl.ui import RED as _RED
 
-_BAR_WIDTH = 24
-_RESET = "\x1b[0m"
-_BOLD = "\x1b[1m"
-_DIM = "\x1b[2m"
-_RED = "\x1b[31m"
-_GREEN = "\x1b[32m"
-_CYAN = "\x1b[36m"
-_CLEAR_LINE = "\x1b[K"
-
-_windows_ansi_ready: bool | None = None
-
-
-def _windows_ansi_enabled() -> bool:
-    """Turn on VT100 escape processing for the classic Windows console host.
-
-    Modern Windows Terminal and PowerShell 7 already support ANSI codes, but
-    the legacy conhost.exe needs this opt-in, done once per process.
-    """
-    global _windows_ansi_ready
-    if _windows_ansi_ready is not None:
-        return _windows_ansi_ready
-    if sys.platform != "win32":
-        _windows_ansi_ready = True
-        return True
-    try:
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-        handle = kernel32.GetStdHandle(-11)
-        mode = ctypes.c_uint32()
-        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
-            _windows_ansi_ready = False
-        else:
-            enable_virtual_terminal_processing = 0x0004
-            _windows_ansi_ready = bool(
-                kernel32.SetConsoleMode(handle, mode.value | enable_virtual_terminal_processing)
-            )
-    except Exception:
-        _windows_ansi_ready = False
-    return _windows_ansi_ready
-
-
-def format_bytes(value: float) -> str:
-    size = float(value)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:.0f}{unit}" if unit == "B" else f"{size:.1f}{unit}"
-        size /= 1024
-    return f"{size:.1f}GB"
-
-
-def render_progress_bar(downloaded: float, total: float | None, unit: str) -> str:
-    ratio = min(1.0, downloaded / total) if total else 0.0
-    filled = int(_BAR_WIDTH * ratio)
-    # Plain ASCII, not Unicode block characters: those render as "?????" under
-    # the legacy codepages several Windows terminals still default to.
-    bar = "#" * filled + "-" * (_BAR_WIDTH - filled)
-    percent = int(ratio * 100)
-    if unit == "pages":
-        label = "Reconstructing"
-        counts = f"{int(downloaded)}/{int(total)} pages" if total else f"{int(downloaded)} pages"
-    else:
-        label = "Downloading"
-        counts = (
-            f"{format_bytes(downloaded)}/{format_bytes(total)}"
-            if total
-            else format_bytes(downloaded)
-        )
-    return f"{label}  [{bar}]  {counts} ({percent}%)"
+_SEVERITY_COLOR = {
+    Severity.ACTIONABLE: YELLOW,
+    Severity.FAILED: _RED,
+    Severity.MISTAKE: DIM,
+    Severity.BUG: MAGENTA,
+}
 
 
 def safe_print(value: object, *, file: TextIO, flush: bool = True, end: str = "\n") -> None:
@@ -115,6 +74,28 @@ def _redact_payload(value: Any, key: str | None = None) -> Any:
     return value
 
 
+def render_progress_bar(
+    downloaded: float,
+    total: float | None,
+    unit: str,
+    glyphs: Glyphs | None = None,
+) -> str:
+    """One progress line: bar, percentage, and whichever counts make sense."""
+    marks = glyphs or Glyphs.plain()
+    ratio = min(1.0, downloaded / total) if total else 0.0
+    bar = render_bar(ratio, marks)
+    percent = f"{int(ratio * 100):3d}%"
+    if unit == "pages":
+        counts = f"{int(downloaded)}/{int(total)}" if total else f"{int(downloaded)}"
+    else:
+        counts = (
+            f"{format_bytes(downloaded)}/{format_bytes(total)}"
+            if total
+            else format_bytes(downloaded)
+        )
+    return f"[{bar}] {percent}  {counts}"
+
+
 class EventSink:
     def __init__(
         self,
@@ -125,6 +106,7 @@ class EventSink:
         stream: TextIO | None = None,
         error_stream: TextIO | None = None,
         color: bool | None = None,
+        unicode_ok: bool | None = None,
     ) -> None:
         self.json_mode = json_mode
         self.quiet = quiet
@@ -132,11 +114,14 @@ class EventSink:
         self.stream = stream or sys.stdout
         self.error_stream = error_stream or sys.stderr
         self._progress_active = False
+        self._spinner: Spinner | None = None
+        self._started = time.monotonic()
         self.interactive = self._detect_interactive()
-        if color is not None:
-            self.color = color
-        else:
-            self.color = self._detect_color_support()
+        self.color = self._detect_color_support() if color is None else color
+        if unicode_ok is None:
+            unicode_ok = stream_handles_unicode(self.stream)
+        self.unicode_ok = bool(unicode_ok)
+        self.glyphs = Glyphs.rich() if self.unicode_ok else Glyphs.plain()
 
     def _detect_interactive(self) -> bool:
         if self.json_mode:
@@ -145,23 +130,40 @@ class EventSink:
         return bool(callable(isatty) and isatty())
 
     def _detect_color_support(self) -> bool:
-        if not self.interactive:
+        if not self.interactive or env_disables_color():
             return False
-        if os.environ.get("NO_COLOR"):
-            return False
-        if os.environ.get("TERM") == "dumb":
-            return False
-        return _windows_ansi_enabled()
+        return windows_ansi_enabled()
 
     def _colorize(self, text: str, *codes: str) -> str:
-        if not self.color:
+        if not self.color or not codes:
             return text
-        return f"{''.join(codes)}{text}{_RESET}"
+        return f"{''.join(codes)}{text}{RESET}"
+
+    def spinner(self, text: str) -> Spinner:
+        """A spinner for a phase with nothing measurable to report."""
+        spinner = Spinner(
+            self.stream,
+            self.glyphs,
+            enabled=self.interactive and not self.quiet and not self.json_mode,
+            color=self.color,
+        )
+        spinner.start(text)
+        return spinner
 
     def _end_progress_line(self) -> None:
         if self._progress_active:
             safe_print("", file=self.stream, end="\n")
             self._progress_active = False
+
+    def _stop_spinner(self) -> None:
+        if self._spinner is not None:
+            self._spinner.stop()
+            self._spinner = None
+
+    def _quiesce(self) -> None:
+        """Clear any live line so the next output starts on clean ground."""
+        self._stop_spinner()
+        self._end_progress_line()
 
     def emit(self, event: str, **payload: Any) -> None:
         data = _redact_payload({"event": event, "version": 1, **payload})
@@ -173,15 +175,7 @@ class EventSink:
             return
 
         if event == "error":
-            self._end_progress_line()
-            message = str(data.get("message", data.get("error", "Unknown error")))
-            safe_print(
-                self._colorize(f"ERROR: {message}", _BOLD, _RED),
-                file=self.error_stream,
-            )
-            detail = data.get("detail")
-            if detail:
-                safe_print(self._colorize(f"  {detail}", _DIM), file=self.error_stream)
+            self._render_error(data)
             return
 
         if self.quiet and event != "complete":
@@ -189,28 +183,123 @@ class EventSink:
         if event in {"strategy", "candidate", "retry", "verification"} and not self.verbose:
             return
 
+        if event == "start":
+            self._begin_resolving()
+            return
+        if event == "document_info":
+            self._render_document_info(data)
+            return
         if event == "download_progress":
-            downloaded = data.get("downloaded", 0)
-            total = data.get("total")
-            unit = str(data.get("unit", "bytes"))
-            line = render_progress_bar(float(downloaded), total, unit)
-            if not self.interactive:
-                # Piped or redirected output: no cursor control, one line per update.
-                safe_print(line, file=self.stream)
-                return
-            color_codes = (_GREEN,) if total and downloaded >= total else (_CYAN,)
-            safe_print(
-                f"\r{_CLEAR_LINE}{self._colorize(line, *color_codes)}",
-                file=self.stream,
-                end="",
-            )
-            self._progress_active = True
+            self._render_progress(data)
+            return
+        if event == "warning":
+            self._quiesce()
+            glyph = self._colorize(self.glyphs.warn, YELLOW)
+            safe_print(f"  {glyph} {data.get('message', '')}", file=self.stream)
+            return
+        if event == "complete":
+            self._render_complete(data)
             return
 
-        self._end_progress_line()
+        self._quiesce()
         message = data.get("message")
-        if event == "complete":
-            text = str(message) if message else str(data.get("path", ""))
-            safe_print(self._colorize(text, _BOLD, _GREEN), file=self.stream)
-        elif message:
-            safe_print(message, file=self.stream)
+        if message:
+            safe_print(f"  {self._colorize(str(message), DIM)}", file=self.stream)
+
+    def _begin_resolving(self) -> None:
+        """Hold a spinner while the link is being worked out, so a slow site
+        does not look like a hung program."""
+        if self.interactive and not self.quiet:
+            self._spinner = self.spinner("Resolving link")
+
+    def _render_document_info(self, data: dict[str, Any]) -> None:
+        """What the link turned out to be, before any bytes move."""
+        self._quiesce()
+        lines: list[str] = [""]
+        site = data.get("site")
+        if site:
+            lines.append(f"  {self._colorize(str(site), DIM)}")
+        title = data.get("title")
+        if title:
+            lines.append(f"  {self._colorize(str(title), BOLD)}")
+        facts = [str(item) for item in data.get("facts", []) if item]
+        if facts:
+            joined = f" {self.glyphs.bullet} ".join(facts)
+            lines.append(f"  {self._colorize(joined, DIM)}")
+        lines.append("")
+        safe_print("\n".join(lines), file=self.stream, end="\n")
+
+    def _render_progress(self, data: dict[str, Any]) -> None:
+        self._stop_spinner()
+        downloaded = float(data.get("downloaded", 0))
+        total = data.get("total")
+        unit = str(data.get("unit", "bytes"))
+        line = render_progress_bar(downloaded, total, unit, self.glyphs)
+
+        trailing = ""
+        if unit == "bytes":
+            rate = format_rate(downloaded, elapsed_since(self._started))
+            if rate:
+                trailing = f"  {rate}"
+        elif unit == "pages":
+            trailing = "  pages"
+
+        if not self.interactive:
+            # Piped or redirected: no cursor control, one line per update.
+            safe_print(f"  {line}{trailing}", file=self.stream)
+            return
+
+        finished = bool(total) and downloaded >= float(total)
+        color = GREEN if finished else CYAN
+        body = self._colorize(line, color) + self._colorize(trailing, DIM)
+        safe_print(f"\r{CLEAR_LINE}  {body}", file=self.stream, end="")
+        self._progress_active = True
+
+    def _render_complete(self, data: dict[str, Any]) -> None:
+        self._quiesce()
+        message = data.get("message")
+        path_text = str(data.get("path", ""))
+
+        if self.quiet:
+            # Scripts read this: quiet mode stays exactly one line, the path,
+            # with nothing decorative in front of it.
+            safe_print(message or path_text, file=self.stream)
+            return
+
+        if message:
+            # Browser install and cleanup report a sentence, not a document.
+            glyph = self._colorize(self.glyphs.tick, GREEN)
+            safe_print(f"  {glyph} {message}", file=self.stream)
+            return
+
+        path = Path(path_text)
+        glyph = self._colorize(self.glyphs.tick, GREEN)
+        safe_print(f"  {glyph} {self._colorize(path.name, BOLD)}", file=self.stream)
+
+        facts = [str(item) for item in data.get("facts", []) if item]
+        if facts:
+            joined = f" {self.glyphs.bullet} ".join(facts)
+            safe_print(f"    {self._colorize(joined, DIM)}", file=self.stream)
+        parent = str(path.parent)
+        if parent and parent != ".":
+            arrow = self.glyphs.arrow
+            safe_print(f"    {self._colorize(f'{arrow} {parent}', DIM)}", file=self.stream)
+
+    def _render_error(self, data: dict[str, Any]) -> None:
+        self._quiesce()
+        identifier = str(data.get("error", "internal_error"))
+        severity = severity_of(identifier)
+        color = _SEVERITY_COLOR.get(severity, _RED)
+        glyph = {
+            Severity.ACTIONABLE: self.glyphs.warn,
+            Severity.BUG: self.glyphs.bug,
+        }.get(severity, self.glyphs.cross)
+
+        message = str(data.get("message", identifier))
+        safe_print(
+            f"  {self._colorize(glyph, color)} {self._colorize(message, BOLD)}",
+            file=self.error_stream,
+        )
+        for line in (data.get("detail"), remedy_for(identifier)):
+            if line:
+                safe_print(f"    {self._colorize(str(line), DIM)}", file=self.error_stream)

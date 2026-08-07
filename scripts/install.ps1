@@ -24,9 +24,61 @@ $checksumPath = Join-Path $temporaryRoot "SHA2-256SUMS"
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\doc-dl"
 $backupRoot = $null
 
+# A returning user has already met the tool, so the wordmark is shown only the
+# first time. Everything decorative degrades on a console that cannot draw it.
+$script:WasInstalled = Test-Path (Join-Path $installRoot "doc-dl.exe")
+$script:PreviousVersion = $null
+if ($script:WasInstalled) {
+    try {
+        $script:PreviousVersion = (& (Join-Path $installRoot "doc-dl.exe") version --quiet) -replace '^doc-dl\s+', ''
+    }
+    catch { $script:PreviousVersion = $null }
+}
+$script:Fancy = [Console]::OutputEncoding.CodePage -eq 65001
+
+function Write-Step {
+    param([string]$Label, [string]$Detail = "")
+    $tick = if ($script:Fancy) { "  " + [char]0x2714 } else { "  [ok]" }
+    Write-Host $tick -ForegroundColor Green -NoNewline
+    Write-Host " $Label" -NoNewline
+    if ($Detail) { Write-Host "  $Detail" -ForegroundColor DarkGray } else { Write-Host "" }
+}
+
+function Write-Banner {
+    # The wordmark, split so "doc-" reads white and "dl" reads brand blue.
+    Write-Host ""
+    if ($script:Fancy) {
+        $b = [char]0x2588; $tl = [char]0x2554; $tr = [char]0x2557
+        $bl = [char]0x255A; $br = [char]0x255D; $h = [char]0x2550; $v = [char]0x2551
+        $lines = @(
+            @("$b$b$b$b$b$b$tr  $b$b$b$b$b$b$tr  $b$b$b$b$b$b$tr      ", "$b$b$b$b$b$b$tr  $b$b$tr"),
+            @("$b$b$tl$h$h$b$b$tr$b$b$tl$h$h$h$b$b$tr$b$b$tl$h$h$h$h$br      ", "$b$b$tl$h$h$b$b$tr $b$b$v"),
+            @("$b$b$v  $b$b$v$b$b$v   $b$b$v$b$b$v     $b$b$b$b$b$tr", "$b$b$v  $b$b$v $b$b$v"),
+            @("$b$b$v  $b$b$v$b$b$v   $b$b$v$b$b$v     $bl$h$h$h$h$br", "$b$b$v  $b$b$v $b$b$v"),
+            @("$b$b$b$b$b$b$tl$br$bl$b$b$b$b$b$b$tl$br$bl$b$b$b$b$b$b$tr      ", "$b$b$b$b$b$b$tl$br $b$b$b$b$b$b$b$tr"),
+            @("$bl$h$h$h$h$h$br  $bl$h$h$h$h$h$br  $bl$h$h$h$h$h$br      ", "$bl$h$h$h$h$h$br  $bl$h$h$h$h$h$h$br")
+        )
+        foreach ($pair in $lines) {
+            Write-Host "   $($pair[0])" -ForegroundColor White -NoNewline
+            Write-Host $pair[1] -ForegroundColor Blue
+        }
+    }
+    else {
+        Write-Host "    _                 _ _"        -ForegroundColor White
+        Write-Host "   | |               | | |"       -ForegroundColor White
+        Write-Host " __| | ___   ___    _| | |"       -ForegroundColor White
+        Write-Host "/ _`` |/ _ \ / __|  / _`` | |"    -ForegroundColor White
+        Write-Host "\__,_|\___/ \___|  \__,_|_|"      -ForegroundColor White
+    }
+    Write-Host ""
+    Write-Host "        a resilient command-line document downloader" -ForegroundColor DarkGray
+    Write-Host ""
+}
+
 New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 try {
-    Write-Host "Downloading $assetName..."
+    Write-Host ""
+    Write-Host "  Fetching $assetName" -ForegroundColor Cyan
     Invoke-WebRequest "$releaseRoot/$assetName" -OutFile $archivePath
     Invoke-WebRequest "$releaseRoot/SHA2-256SUMS" -OutFile $checksumPath
 
@@ -72,9 +124,30 @@ try {
         $env:Path = "$installRoot;$env:Path"
     }
 
-    Write-Host "Installed doc-dl in $installRoot"
-    & (Join-Path $installRoot "doc-dl.exe") version
-    Write-Host 'Open a new terminal and run: doc-dl "https://example.com/document.pdf"'
+    $newVersion = (& (Join-Path $installRoot "doc-dl.exe") version --quiet) -replace '^doc-dl\s+', ''
+
+    if ($script:WasInstalled) {
+        if ($script:PreviousVersion -and $script:PreviousVersion -ne $newVersion) {
+            Write-Step "Updated doc-dl" "$($script:PreviousVersion) -> $newVersion"
+        }
+        else {
+            Write-Step "Reinstalled doc-dl" $newVersion
+        }
+        Write-Host ""
+    }
+    else {
+        Write-Banner
+        Write-Step "Verified" "SHA-256 matches the published checksum"
+        Write-Step "Installed" $installRoot
+        Write-Step "On PATH" "open a new terminal to pick it up"
+        Write-Host ""
+        Write-Host "  doc-dl $newVersion is ready." -ForegroundColor Green
+        Write-Host ""
+        Write-Host "  Try it" -ForegroundColor DarkGray -NoNewline
+        Write-Host "  doc-dl " -NoNewline
+        Write-Host '"https://example.com/report.pdf"' -ForegroundColor Cyan
+        Write-Host ""
+    }
 }
 catch {
     if ($backupRoot -and (Test-Path $backupRoot) -and -not (Test-Path $installRoot)) {

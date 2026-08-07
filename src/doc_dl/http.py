@@ -25,7 +25,8 @@ from doc_dl.filenames import (
 )
 from doc_dl.models import DocumentCandidate, DownloadRequest
 from doc_dl.redaction import redact_url
-from doc_dl.urls import normalized_url
+from doc_dl.ui import format_bytes
+from doc_dl.urls import display_host, normalized_url
 from doc_dl.verify import (
     VerificationResult,
     base_media_type,
@@ -289,6 +290,21 @@ class HttpDownloader:
             filename=filename,
         )
         self._write_state(state_path, state)
+
+        # Say what is about to be downloaded before any bytes move, so a slow
+        # transfer is not an unexplained wait.
+        facts = [format_bytes(expected_total)] if expected_total else []
+        extension = Path(filename).suffix.lstrip(".").upper()
+        if extension:
+            facts.append(extension)
+        self.sink.emit(
+            "document_info",
+            # The site the person recognises, not whichever CDN host the
+            # redirect chain happened to land on.
+            site=display_host(candidate.url),
+            title=filename,
+            facts=facts,
+        )
 
         mode = "ab" if append else "wb"
         downloaded = existing_size

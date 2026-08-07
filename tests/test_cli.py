@@ -24,9 +24,21 @@ def test_bare_invocation_prints_help_and_examples(capsys) -> None:
     assert "doc-dl doctor" in out
 
 
-def test_version_command(capsys) -> None:
+def test_version_command_shows_the_banner_and_version(capsys) -> None:
     assert run(["version"]) == 0
-    assert capsys.readouterr().out.startswith(f"doc-dl {__version__}")
+    out = capsys.readouterr().out
+    assert __version__ in out
+    assert "Alexandria" in out
+    assert "a resilient command-line document downloader" in out
+
+
+def test_version_stays_machine_readable(capsys) -> None:
+    # Scripts asking for the version must not have to parse art.
+    assert run(["version", "--quiet"]) == 0
+    assert capsys.readouterr().out.strip() == f"doc-dl {__version__}"
+
+    assert run(["version", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["doc_dl"] == __version__
 
 
 def test_provider_listing_json(capsys) -> None:
@@ -52,6 +64,7 @@ def test_powershell_url_form_downloads_document(
             "-Url",
             fixture_server.url("/files/sample.pdf"),
             "--no-browser",
+            "--quiet",
             "--output",
             str(tmp_path),
         ]

@@ -24,6 +24,9 @@ from doc_dl.runtime import (
     uninstall_chromium,
 )
 from doc_dl.session import SessionManager
+from doc_dl.ui import BOLD, DIM, render_banner
+
+RELEASE_NAME = "Alexandria"
 
 COMMANDS = {
     "download",
@@ -203,6 +206,38 @@ def _resolve_url(args: argparse.Namespace) -> str:
     if not url:
         raise DocDlError("invalid_arguments", "A document URL is required")
     return str(url)
+
+
+def _run_version(argv: Sequence[str]) -> int:
+    args = _simple_parser("version").parse_args(list(argv))
+    sink = _sink_from_args(args)
+    if args.json:
+        safe_print(
+            json.dumps({"event": "version", "version": 1, "doc_dl": __version__}),
+            file=sys.stdout,
+        )
+        return 0
+    if args.quiet:
+        safe_print(f"doc-dl {__version__}", file=sys.stdout)
+        return 0
+
+    safe_print("", file=sys.stdout)
+    safe_print(
+        render_banner(unicode_ok=sink.unicode_ok, color=sink.color),
+        file=sys.stdout,
+    )
+    safe_print("", file=sys.stdout)
+    version_line = f"   {__version__}"
+    if RELEASE_NAME:
+        suffix = f'  "{RELEASE_NAME}"'
+        version_line += sink._colorize(suffix, DIM) if sink.color else suffix
+    safe_print(sink._colorize(version_line, BOLD) if sink.color else version_line, file=sys.stdout)
+
+    providers = ", ".join(sorted(item.name for item in ProviderRegistry().all()))
+    footer = f"   {providers}\n   github.com/mkhlz/doc-dl"
+    safe_print(sink._colorize(footer, DIM) if sink.color else footer, file=sys.stdout)
+    safe_print("", file=sys.stdout)
+    return 0
 
 
 def _run_download(argv: Sequence[str]) -> int:
@@ -400,8 +435,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         if command == "clean":
             return _run_clean(command_args)
         if command == "version":
-            print(f"doc-dl {__version__}")
-            return 0
+            return _run_version(command_args)
         return _run_download(arguments)
     except DocDlError as exc:
         json_mode = "--json" in arguments

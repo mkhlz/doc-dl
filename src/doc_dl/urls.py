@@ -56,6 +56,11 @@ def same_site(host: str, other: str) -> bool:
     return registrable_domain(host) == registrable_domain(other)
 
 
+def display_host(url: str) -> str:
+    """The hostname as a person would name the site."""
+    return host_of(url).removeprefix("www.")
+
+
 def host_of(url: str) -> str:
     try:
         return (urlsplit(url).hostname or "").casefold()

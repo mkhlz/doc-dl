@@ -25,8 +25,16 @@ from doc_dl.models import (
 from doc_dl.providers.base import Provider
 from doc_dl.providers.registry import ProviderRegistry
 from doc_dl.redaction import redact_url
-from doc_dl.urls import host_of, same_site, validate_url
+from doc_dl.ui import format_bytes, format_duration
+from doc_dl.urls import display_host, host_of, same_site, validate_url
 from doc_dl.verify import ensure_document_extension, verify_document
+
+PROVENANCE_PHRASES = {
+    Provenance.ORIGINAL: "original file",
+    Provenance.EXPORTED: "exported by the site",
+    Provenance.RECONSTRUCTED: "rebuilt from viewer images",
+    Provenance.PRINTED: "printed from the page",
+}
 
 
 class DownloadEngine:
@@ -48,15 +56,14 @@ class DownloadEngine:
         provider = self.registry.select(request.url, request.forced_provider)
         source_url = provider.normalize(request.url)
         records: list[StrategyRecord] = []
+        # The provider name is an implementation detail; what is worth saying is
+        # which site the link belongs to, reported once the document is known.
         self.sink.emit(
             "start",
             message=f"Resolving {redact_url(request.url)}",
             source_url=request.url,
-        )
-        self.sink.emit(
-            "provider_selected",
-            message=f"Provider: {provider.name}",
             provider=provider.name,
+            site=display_host(request.url),
         )
 
         landing_pages: list[LandingPage] = []
@@ -421,6 +428,13 @@ class DownloadEngine:
             image_set = provider.image_pages_from_html(landing.html, landing.url)
             if not image_set or not image_set.image_urls:
                 continue
+            pages = len(image_set.image_urls)
+            self.sink.emit(
+                "document_info",
+                site=display_host(landing.url),
+                title=image_set.title,
+                facts=[f"{pages} pages", "rebuilding as PDF"],
+            )
             reconstruct_started = time.monotonic()
             try:
                 local_path, page_count = ImageSetReconstructor(self.sink).reconstruct(
@@ -587,7 +601,22 @@ class DownloadEngine:
             source_url=result.source_url,
             elapsed_ms=result.elapsed_ms,
             page_count=result.page_count,
+            facts=self._result_facts(result),
         )
+
+    @staticmethod
+    def _result_facts(result: DownloadResult) -> list[str]:
+        """The short summary under a finished download.
+
+        The provenance phrase is the important one: a rebuilt document must
+        never be presented as though it were the publisher's own file.
+        """
+        facts = [format_bytes(result.size)]
+        if result.page_count:
+            facts.append(f"{result.page_count} pages")
+        facts.append(PROVENANCE_PHRASES[result.provenance])
+        facts.append(format_duration(result.elapsed_ms / 1000))
+        return facts
 
     def _record(
         self,
