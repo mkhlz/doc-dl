@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from doc_dl.errors import DocDlError
 from doc_dl.providers.base import Provider
 from doc_dl.providers.generic import GenericProvider
+from doc_dl.providers.googledrive import GoogleDriveProvider
 from doc_dl.providers.scribd import ScribdProvider
 from doc_dl.providers.slideshare import SlideShareProvider
 
@@ -12,7 +13,13 @@ from doc_dl.providers.slideshare import SlideShareProvider
 class ProviderRegistry:
     def __init__(self, providers: Iterable[Provider] | None = None) -> None:
         self._providers = list(
-            providers or [ScribdProvider(), SlideShareProvider(), GenericProvider()]
+            providers
+            or [
+                ScribdProvider(),
+                SlideShareProvider(),
+                GoogleDriveProvider(),
+                GenericProvider(),
+            ]
         )
 
     def all(self) -> list[Provider]:

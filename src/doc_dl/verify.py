@@ -106,6 +106,23 @@ def response_looks_document_like(
     return extension in DOCUMENT_EXTENSIONS
 
 
+_GENERIC_MEDIA_TYPES = {None, "application/octet-stream", "application/binary"}
+_SUFFIX_MEDIA_TYPES = {".txt": "text/plain", ".md": "text/markdown", ".csv": "text/csv"}
+
+
+def media_type_for_download(media_type: str | None, filename: str) -> str | None:
+    """Resolve a usefully specific media type for a download.
+
+    Servers routinely hand back a placeholder such as application/octet-stream
+    for text attachments (Google Drive does this), which later reads as an
+    unrecognised document. The filename the server itself supplied is a better
+    signal in that case.
+    """
+    if base_media_type(media_type) not in _GENERIC_MEDIA_TYPES:
+        return media_type
+    return _SUFFIX_MEDIA_TYPES.get(Path(filename).suffix.casefold(), media_type)
+
+
 _REPLACEABLE_SUFFIXES = {"", ".bin", ".download", ".php", ".aspx", ".html", ".htm"}
 
 

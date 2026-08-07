@@ -275,3 +275,43 @@ produced locally:
 ```bash
 python scripts/build_portable.py --target windows-x64 --variant slim --output ./dist-local
 ```
+
+---
+
+## 12. Google Drive share links reached only the viewer page
+
+**Released in 0.1.11**
+
+Symptom:
+
+```
+doc-dl "https://drive.google.com/file/d/<id>/view?resourcekey=..."
+Provider: generic
+ERROR: The browser page did not expose document page containers for reconstruction
+```
+
+A Drive share link points at a viewer page, not the file, so the HTTP path saw
+HTML and the browser path found only viewer chrome with no page containers to
+reconstruct.
+
+Drive does expose a direct endpoint. Lifting the file id out of the URL and
+rewriting it to `/uc?export=download&id=<id>` redirects to
+`drive.usercontent.google.com` and serves the real file with a proper
+`Content-Disposition`. Any `resourcekey` must be carried across or older shared
+links are refused.
+
+Two supporting problems surfaced with it:
+
+- Drive labels text attachments `application/octet-stream`, which
+  `verify_document` then rejected as unrecognised. The filename the server
+  itself supplies is the better signal, so `media_type_for_download` in
+  `verify.py` resolves a generic placeholder using the download's own
+  extension.
+- The rewrite was first written into `GenericProvider.normalize`. That is the
+  site-agnostic fallback, so per-site knowledge does not belong there; it was
+  moved to a `GoogleDriveProvider` alongside the Scribd and SlideShare
+  providers, matching the pattern in issue 6.
+
+**Known limitation:** Drive serves an interstitial virus-scan warning page
+instead of the file for large downloads (roughly 100 MB and above). That case
+is not handled yet and will surface as unexpected HTML rather than a document.

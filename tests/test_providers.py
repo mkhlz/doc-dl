@@ -6,6 +6,8 @@ import pytest
 
 from doc_dl.config import StatePaths
 from doc_dl.errors import DocDlError
+from doc_dl.providers.generic import GenericProvider
+from doc_dl.providers.googledrive import GoogleDriveProvider
 from doc_dl.providers.registry import ProviderRegistry
 from doc_dl.providers.scribd import ScribdProvider, _clean_scribd_title
 from doc_dl.providers.slideshare import SlideShareProvider
@@ -180,3 +182,50 @@ def test_slideshare_returns_none_for_malformed_json() -> None:
 def test_registry_selects_slideshare_over_generic() -> None:
     provider = ProviderRegistry().select("https://www.slideshare.net/slideshow/deck/123")
     assert provider.name == "slideshare"
+
+
+def test_google_drive_normalizes_a_shared_file_view_link() -> None:
+    provider = GoogleDriveProvider()
+    assert (
+        provider.normalize(
+            "https://drive.google.com/file/d/0B9P1L--7Wd2vU3VUVlFnbTgtS2c/view?usp=sharing"
+        )
+        == "https://drive.google.com/uc?export=download&id=0B9P1L--7Wd2vU3VUVlFnbTgtS2c"
+    )
+
+
+def test_google_drive_preserves_the_resource_key() -> None:
+    provider = GoogleDriveProvider()
+    assert (
+        provider.normalize("https://drive.google.com/file/d/abc123/view?resourcekey=0-testKey")
+        == "https://drive.google.com/uc?export=download&id=abc123&resourcekey=0-testKey"
+    )
+
+
+def test_google_drive_accepts_open_and_uc_links() -> None:
+    provider = GoogleDriveProvider()
+    for url in (
+        "https://drive.google.com/open?id=abc123",
+        "https://drive.google.com/uc?export=download&id=abc123",
+        "https://docs.google.com/uc?id=abc123",
+    ):
+        assert provider.match(url) == 100
+        assert provider.normalize(url) == ("https://drive.google.com/uc?export=download&id=abc123")
+
+
+def test_google_drive_ignores_unrelated_google_urls() -> None:
+    provider = GoogleDriveProvider()
+    assert provider.match("https://drive.google.com/drive/my-drive") == 0
+    assert provider.match("https://example.com/file/d/abc123/view") == 0
+
+
+def test_registry_selects_google_drive_over_generic() -> None:
+    provider = ProviderRegistry().select("https://drive.google.com/file/d/abc123/view?usp=sharing")
+    assert provider.name == "googledrive"
+
+
+def test_generic_provider_does_not_rewrite_urls() -> None:
+    # The fallback provider must stay site-agnostic: per-site knowledge
+    # belongs in that site's own provider.
+    url = "https://drive.google.com/file/d/abc123/view"
+    assert GenericProvider().normalize(url) == url

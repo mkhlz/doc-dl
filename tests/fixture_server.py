@@ -123,6 +123,13 @@ class FixtureHandler(BaseHTTPRequestHandler):
         if path == "/xhr/document":
             self._send_document(PDF_BYTES, "application/pdf", 'inline; filename="xhr.pdf"')
             return
+        if path == "/files/attachment-text":
+            self._send_document(
+                b"doc-dl fixture text\n",
+                "application/octet-stream",
+                'attachment; filename="fixture.txt"',
+            )
+            return
         if path == "/telemetry/status":
             self._send_document(b"", "text/plain", 'attachment; filename="status"')
             return

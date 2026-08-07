@@ -107,3 +107,17 @@ def test_rejects_corrupt_pdf_response(fixture_server: FixtureServer, tmp_path: P
             DownloadRequest(url=url, output=tmp_path),
         )
     assert raised.value.identifier == "corrupt_document"
+
+
+def test_accepts_text_attachment_with_generic_media_type(
+    fixture_server: FixtureServer,
+    tmp_path: Path,
+) -> None:
+    url = fixture_server.url("/files/attachment-text")
+    result = HttpDownloader(quiet_sink(), retry_base_delay=0).fetch(
+        DocumentCandidate(url=url, strategy="browser-network", confidence=95),
+        DownloadRequest(url=url, output=tmp_path),
+    )
+    assert isinstance(result, RetrievedDocument)
+    assert result.path.suffix == ".txt"
+    assert result.media_type == "text/plain"

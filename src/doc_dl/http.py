@@ -31,6 +31,7 @@ from doc_dl.verify import (
     base_media_type,
     ensure_document_extension,
     looks_like_html,
+    media_type_for_download,
     response_looks_document_like,
     verify_document,
 )
@@ -277,6 +278,7 @@ class HttpDownloader:
         filename = sanitize_filename(
             server_filename or candidate.filename or filename_from_url(str(response.url))
         )
+        media_type = media_type_for_download(media_type, filename)
         state = ResumeState(
             version=1,
             source_url=normalized_url(candidate.url),
