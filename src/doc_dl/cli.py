@@ -232,10 +232,6 @@ def _run_version(argv: Sequence[str]) -> int:
         suffix = f'  "{RELEASE_NAME}"'
         version_line += sink._colorize(suffix, DIM) if sink.color else suffix
     safe_print(sink._colorize(version_line, BOLD) if sink.color else version_line, file=sys.stdout)
-
-    providers = ", ".join(sorted(item.name for item in ProviderRegistry().all()))
-    footer = f"   {providers}\n   github.com/mkhlz/doc-dl"
-    safe_print(sink._colorize(footer, DIM) if sink.color else footer, file=sys.stdout)
     safe_print("", file=sys.stdout)
     return 0
 
