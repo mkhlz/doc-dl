@@ -1,6 +1,6 @@
 <div align="center">
 
-[![doc-dl](https://raw.githubusercontent.com/mkhlz/doc-dl/master/.github/banner.svg)](#readme)
+[![doc-dl](https://raw.githubusercontent.com/mkhlz/doc-dl/master/.github/banner.png)](#readme)
 
 [![Release version](https://img.shields.io/github/v/release/mkhlz/doc-dl?color=brightgreen&label=Latest&style=for-the-badge)](#installation "Installation")
 [![Python Version](https://img.shields.io/badge/python-%3E%3D3.11-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://github.com/mkhlz/doc-dl/blob/master/pyproject.toml "Python Version")
