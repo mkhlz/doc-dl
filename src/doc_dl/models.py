@@ -97,7 +97,6 @@ class ArchiveRequest:
     output: Path | None = None
     filename_template: str | None = None
     profile: str = "default"
-    mode: str = "auto"
     timeout_seconds: float = 90.0
     overwrite: bool = False
     write_metadata: bool = True
@@ -119,6 +118,7 @@ class ArchiveResult:
     canonical_url: str | None
     paywall_suspected: bool
     elapsed_ms: int
+    captured_at: str
     page_count: int | None = None
 
 

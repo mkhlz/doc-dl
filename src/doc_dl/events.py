@@ -256,6 +256,7 @@ class EventSink:
         self._progress_active = True
 
     def _render_complete(self, data: dict[str, Any]) -> None:
+        had_progress = self._progress_active
         self._quiesce()
         message = data.get("message")
         path_text = str(data.get("path", ""))
@@ -265,6 +266,12 @@ class EventSink:
             # with nothing decorative in front of it.
             safe_print(message or path_text, file=self.stream)
             return
+
+        if had_progress:
+            # A little breathing room between the finished progress bar and
+            # the result, so the checkmark line doesn't read as though it
+            # were just another progress frame.
+            safe_print("", file=self.stream)
 
         if message:
             # Browser install and cleanup report a sentence, not a document.

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Read More Fixture</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #teaser { height: 1200px; background: white; }
+    #rest { display: none; height: 1200px; background: #eeeeee; }
+  </style>
+</head>
+<body>
+  <div id="teaser">Visible teaser content above the fold.</div>
+  <button id="readmore" onclick="document.getElementById('rest').style.display = 'block'; this.remove();">
+    Read More
+  </button>
+  <button
+    id="overflow-menu"
+    aria-label="More"
+    aria-expanded="false"
+    onclick="document.getElementById('menu-popup').style.display = 'block';"
+  ></button>
+  <div id="menu-popup" style="display: none;">Save for later / Share / Go to source</div>
+  <div id="rest">
+    Hidden expanded content that only appears once Read More is clicked, tall
+    enough on its own to push the page past a single screenshot viewport.
+  </div>
+</body>
+</html>

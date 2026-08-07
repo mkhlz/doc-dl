@@ -115,3 +115,40 @@ def test_blank_viewer_page_is_rejected(
             )
         )
     assert raised.value.identifier == "render_incomplete"
+
+
+@pytest.mark.browser
+def test_page_with_no_document_falls_back_to_a_page_capture(
+    fixture_server: FixtureServer,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DOC_DL_STATE_DIR", str(tmp_path / "state"))
+    result = DownloadEngine(quiet_sink()).download(
+        DownloadRequest(
+            url=fixture_server.url("/site/article.html"),
+            output=tmp_path / "output",
+            timeout_seconds=45,
+        )
+    )
+    assert result.provenance == Provenance.CAPTURED
+    assert result.path.is_file()
+
+
+@pytest.mark.browser
+def test_original_only_skips_the_page_capture_fallback(
+    fixture_server: FixtureServer,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DOC_DL_STATE_DIR", str(tmp_path / "state"))
+    with pytest.raises(DocDlError) as raised:
+        DownloadEngine(quiet_sink()).download(
+            DownloadRequest(
+                url=fixture_server.url("/site/article.html"),
+                output=tmp_path / "output",
+                original_only=True,
+                timeout_seconds=45,
+            )
+        )
+    assert raised.value.identifier == "candidate_not_found"

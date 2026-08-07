@@ -108,15 +108,6 @@ def _archive_parser() -> DocDlArgumentParser:
         dest="filename_template",
         help="Filename template using {title}, {ext}, {provider}, or {filename}",
     )
-    parser.add_argument(
-        "--mode",
-        choices=("auto", "readability", "screenshot"),
-        default="auto",
-        help=(
-            "auto (default): clean article PDF, falling back to a full-page "
-            "screenshot when there isn't enough readable text"
-        ),
-    )
     parser.add_argument("--profile", default="default", help="Isolated browser profile name")
     parser.add_argument("--overwrite", action="store_true", help="Replace an existing output")
     parser.add_argument("--timeout", default="90s", help="Total timeout, such as 60s, 5m, or 1h")
@@ -304,7 +295,6 @@ def _run_archive(argv: Sequence[str]) -> int:
         output=args.output,
         filename_template=args.filename_template,
         profile=args.profile,
-        mode=args.mode,
         timeout_seconds=parse_duration(args.timeout),
         overwrite=args.overwrite,
         write_metadata=not args.no_metadata,

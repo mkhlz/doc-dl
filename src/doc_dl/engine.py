@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 import time
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from doc_dl.discovery import discover_document_candidates
@@ -34,6 +36,7 @@ PROVENANCE_PHRASES = {
     Provenance.EXPORTED: "exported by the site",
     Provenance.RECONSTRUCTED: "rebuilt from viewer images",
     Provenance.PRINTED: "printed from the page",
+    Provenance.CAPTURED: "page snapshot, not a document",
 }
 
 
@@ -174,9 +177,9 @@ class DownloadEngine:
                 exc.message,
                 self._elapsed(browser_started),
             )
-            if reconstruction_error:
-                raise reconstruction_error from exc
-            raise
+            return self._fallback_to_page_capture_or_raise(
+                reconstruction_error or exc, source_url, request, provider, records, started
+            )
 
         self._record(
             records,
@@ -254,9 +257,9 @@ class DownloadEngine:
                     exc.message,
                     self._elapsed(render_started),
                 )
-                if reconstruction_error:
-                    raise reconstruction_error from exc
-                raise
+                return self._fallback_to_page_capture_or_raise(
+                    reconstruction_error or exc, source_url, request, provider, records, started
+                )
             self._record(
                 records,
                 "browser-render-fallback",
@@ -308,12 +311,93 @@ class DownloadEngine:
                 "The current profile cannot access this document",
                 detail=provider.access_hint(),
             )
-        if reconstruction_error:
-            raise reconstruction_error
         self._raise_access_error(provider)
-        raise DocDlError(
+        final_error = reconstruction_error or DocDlError(
             "candidate_not_found",
             "No verified original or reconstructable document was found",
+        )
+        return self._fallback_to_page_capture_or_raise(
+            final_error, source_url, request, provider, records, started
+        )
+
+    def _fallback_to_page_capture_or_raise(
+        self,
+        primary_error: DocDlError,
+        url: str,
+        request: DownloadRequest,
+        provider: Provider,
+        records: list[StrategyRecord],
+        started: float,
+    ) -> DownloadResult:
+        """The very last resort: rather than surface `primary_error`, try
+        snapshotting the page itself, exactly as `doc-dl archive` would.
+        Falls back to raising `primary_error` if that also fails, or if the
+        request's flags rule browser-based capture out entirely."""
+        if request.allow_render and not request.original_only and request.browser_enabled:
+            with contextlib.suppress(DocDlError):
+                return self._attempt_page_capture(url, request, provider, records, started)
+        raise primary_error
+
+    def _attempt_page_capture(
+        self,
+        url: str,
+        request: DownloadRequest,
+        provider: Provider,
+        records: list[StrategyRecord],
+        started: float,
+    ) -> DownloadResult:
+        """Last resort for a page with nothing downloadable on it at all: snapshot
+        the page itself, exactly as `doc-dl archive` would, so the person still
+        gets something rather than a bare failure. Never mistaken for the real
+        document -- committed with Provenance.CAPTURED, never ORIGINAL."""
+        from doc_dl.archive import PageArchiver, _default_archive_filename
+
+        self.sink.emit(
+            "warning",
+            message="No downloadable document was found; capturing the page itself instead.",
+        )
+        remaining = max(20.0, request.timeout_seconds - self._elapsed(started) / 1000)
+        capture_started = time.monotonic()
+        try:
+            output, extraction, _final_url = PageArchiver(self.sink).capture(
+                url, profile=request.profile, timeout_seconds=remaining
+            )
+        except DocDlError as exc:
+            self._record(
+                records,
+                "page-capture",
+                StrategyStatus.FAILED,
+                exc.identifier,
+                exc.message,
+                self._elapsed(capture_started),
+            )
+            raise
+        self._record(
+            records,
+            "page-capture",
+            StrategyStatus.SUCCEEDED,
+            "captured",
+            "Captured the page itself since no downloadable document was found",
+            self._elapsed(capture_started),
+        )
+        # A plain title collides across a folder of these fallbacks ("Live
+        # Updates" is a popular one); a custom --filename template still
+        # gets the plain title as {title}, same as everywhere else.
+        if request.filename_template:
+            suggested_filename = extraction.title or "page"
+        else:
+            suggested_filename = _default_archive_filename(
+                extraction.title, extraction.site_name, datetime.now(UTC)
+            )
+        return self._commit_local_artifact(
+            output,
+            suggested_filename,
+            "application/pdf",
+            request,
+            provider,
+            records,
+            started,
+            Provenance.CAPTURED,
         )
 
     def _raise_access_error(self, provider: Provider) -> None:

@@ -6,6 +6,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from doc_dl.config import StatePaths
 from doc_dl.discovery import discover_document_candidates
@@ -24,6 +25,38 @@ from doc_dl.runtime import configure_browsers_path, install_chromium, is_chromiu
 from doc_dl.verify import base_media_type, response_looks_document_like
 
 _DOWNLOAD_TEXT = re.compile(r"\b(download|export|save\s+(?:as|file|pdf)|get\s+pdf)\b", re.I)
+
+# Ad and analytics beacons routinely serve their diagnostic pings as
+# text/plain at a URL ending in something like "f.txt" or "gen_204", which
+# otherwise passes response_looks_document_like's plain-text-with-a-document-
+# extension check. A news or blog page loads dozens of these, and without
+# this filter each one gets reported as a candidate document.
+_AD_TRACKER_HOSTS = (
+    "doubleclick.net",
+    "googlesyndication.com",
+    "google-analytics.com",
+    "googletagmanager.com",
+    "googletagservices.com",
+    "adnxs.com",
+    "amazon-adsystem.com",
+    "adsrvr.org",
+    "criteo.com",
+    "taboola.com",
+    "outbrain.com",
+    "scorecardresearch.com",
+    "quantserve.com",
+    "moatads.com",
+    "casalemedia.com",
+    "pubmatic.com",
+    "rubiconproject.com",
+    "openx.net",
+    "bidswitch.net",
+)
+
+
+def _is_ad_tracker_host(hostname: str) -> bool:
+    return any(hostname == host or hostname.endswith(f".{host}") for host in _AD_TRACKER_HOSTS)
+
 
 # Playwright's sync API drives an asyncio connection on a background thread.
 # When that thread's event loop tears down, pending Task/Future objects log a
@@ -267,6 +300,9 @@ class BrowserExtractor:
 
         def on_response(response: Any) -> None:
             try:
+                hostname = (urlsplit(response.url).hostname or "").casefold()
+                if _is_ad_tracker_host(hostname):
+                    return
                 headers = response.headers
                 media_type = base_media_type(headers.get("content-type"))
                 disposition = headers.get("content-disposition")

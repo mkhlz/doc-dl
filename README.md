@@ -321,17 +321,23 @@ doc-dl URL --output .\downloads --filename "{provider}-{title}.{ext}"
 ## Archiving a page (news articles, blog posts, and other web pages)
 
 `doc-dl archive` snapshots a page as a PDF instead of looking for a
-downloadable file. It tries a clean, readable article extraction first, and
-falls back to a full-page screenshot when there isn't enough readable text
-(sparse pages, or content blocked behind a paywall):
+downloadable file. It expands any "Read more" / "Continue reading" toggle
+and dismisses cookie banners first, then takes one continuous full-page
+screenshot — the same idea as a scrolling-capture tool — and slices that
+into normal PDF pages in Python, rather than scrolling and re-screenshotting
+step by step (which could crop or duplicate content at page boundaries if
+anything shifted between shots). No attempt is made to isolate or re-style
+"the article part" of the page, since that varies too much from site to
+site to do reliably:
 
 ```powershell
 doc-dl archive "https://example.com/news/some-article"
 ```
 
 A `.doc-dl.json` metadata sidecar is written by default (opt out with
-`--no-metadata`), recording the title, byline, publish date, site name, the
-capture method used, and whether paywall indicators were detected:
+`--no-metadata`), recording whatever title, byline, publish date, and site
+name could be read off the page's own metadata tags, and whether paywall
+indicators were detected:
 
 ```json
 {
@@ -339,18 +345,23 @@ capture method used, and whether paywall indicators were detected:
   "byline": "Jordan Rivera",
   "published": "2026-08-01T09:00:00Z",
   "site_name": "The Harbor Gazette",
-  "provenance": "printed",
+  "provenance": "captured",
   "paywall_suspected": false
 }
 ```
 
-A page flagged `paywall_suspected: true` still produces the best capture it
-can manage (usually just the free teaser text, or a screenshot) — the flag is
-a signal to check the result, not a guarantee the capture is incomplete.
+A page flagged `paywall_suspected: true` still captures whatever is visible
+(usually just the free teaser above the paywall) — the flag is a signal to
+check the result, not a guarantee the capture is incomplete.
+
+The default filename is the title, site name, and capture date —
+`Harbor City Approves New Transit Line - The Harbor Gazette - 2026-08-01.pdf`
+— so a folder of archived pages sorts sensibly and generic titles from
+different sites ("Live Updates", "Home") don't collide. A `--filename`
+template still gets the plain article title as `{title}`.
 
 | Option | What it does |
 | --- | --- |
-| `--mode auto\|readability\|screenshot` | Force the capture method instead of choosing automatically. |
 | `--profile NAME` | Use an isolated browser profile (useful for sites you're signed into). |
 | `--timeout 90s` | Set the full operation timeout. |
 | `--no-metadata` | Skip writing the `.doc-dl.json` sidecar. |
@@ -377,11 +388,18 @@ doc-dl logout scribd --profile personal --yes
 `doc-dl` prefers an original file whenever one is available. If a site offers
 only a visible viewer, it can create a reconstructed PDF from the pages the
 viewer actually displays. Successful results identify their source as
-`original`, `exported`, `reconstructed`, or `printed` in the metadata.
+`original`, `exported`, `reconstructed`, or `captured` in the metadata.
 
 The tool rejects empty files, HTML masquerading as a document, corrupt PDFs,
 invalid Office containers, and visibly blank reconstructed pages. A partial or
 unverified result is not promoted to the final output path.
+
+If nothing downloadable turns up at all — a news article or blog post with no
+attached file, for example — `download` falls back to snapshotting the page
+itself, the same way `doc-dl archive` would, rather than failing outright.
+This is reported as `captured` provenance so it's never confused with the
+real document. Pass `--original-only` to disable this and get a hard failure
+instead.
 
 ## Useful commands
 
