@@ -24,7 +24,7 @@ from doc_dl.runtime import (
     uninstall_chromium,
 )
 from doc_dl.session import SessionManager
-from doc_dl.ui import BOLD, DIM, render_banner
+from doc_dl.ui import BOLD, DIM, enable_utf8_output, render_banner
 
 RELEASE_NAME = "Alexandria"
 
@@ -411,6 +411,7 @@ def _print_bare_invocation_help() -> None:
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    enable_utf8_output()
     configure_browsers_path()
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not arguments:

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from doc_dl.config import StatePaths
 from doc_dl.runtime import build_variant, chromium_executable_path, effective_browsers_path
+from doc_dl.ui import stream_handles_unicode
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +71,12 @@ def run_doctor(state: StatePaths | None = None) -> list[DoctorCheck]:
         checks.append(DoctorCheck("state-directory", True, str(paths.root)))
     except OSError as exc:
         checks.append(DoctorCheck("state-directory", False, str(exc)))
+
+    # Which output style this terminal gets, so a plain-looking install can be
+    # explained rather than guessed at.
+    encoding = getattr(sys.stdout, "encoding", None) or "unknown"
+    style = "full glyphs" if stream_handles_unicode(sys.stdout) else "plain ASCII"
+    checks.append(DoctorCheck("terminal", True, f"{style} ({encoding})", required=False))
 
     return checks
 

@@ -64,6 +64,32 @@ def windows_ansi_enabled() -> bool:
     return _windows_ansi_ready
 
 
+def enable_utf8_output() -> None:
+    """Match Python's output encoding to a console that already speaks UTF-8.
+
+    A frozen build does not inherit the interpreter's UTF-8 default, so on
+    Windows it would encode block and braille characters as question marks even
+    in a terminal perfectly able to draw them. The encoding is only raised when
+    the console reports code page 65001, so a console that genuinely cannot
+    display them is left alone.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        if ctypes.windll.kernel32.GetConsoleOutputCP() != 65001:  # type: ignore[attr-defined]
+            return
+    except Exception:
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+
+
 def stream_handles_unicode(stream: TextIO) -> bool:
     """Whether decorative Unicode survives this stream's encoding.
 
