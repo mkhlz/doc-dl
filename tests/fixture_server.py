@@ -167,8 +167,34 @@ class FixtureHandler(BaseHTTPRequestHandler):
         if path.startswith("/imageset/pages/") and path.endswith(".jpg"):
             self._send_bytes(200, JPEG_BYTES, "image/jpeg")
             return
+        if path == "/imageset/flaky-page.jpg":
+            if self.state.counts[path] == 1:
+                self._send_bytes(503, b"unavailable", "text/plain")
+            else:
+                self._send_bytes(200, JPEG_BYTES, "image/jpeg")
+            return
         if path == "/imageset/missing-page.jpg":
             self._send_bytes(404, b"not found", "text/plain")
+            return
+        if path == "/imageset/always-unavailable.jpg":
+            self._send_bytes(503, b"unavailable", "text/plain")
+            return
+        if path.startswith("/imageset/truncated/"):
+            # Announces more pages than it publishes: pages 1-3 exist, the
+            # rest are permanently absent, like a stale slide count.
+            page = Path(path).stem
+            if page.isdigit() and int(page) <= 3:
+                self._send_bytes(200, JPEG_BYTES, "image/jpeg")
+            else:
+                self._send_bytes(404, b"not found", "text/plain")
+            return
+        if path.startswith("/imageset/gap/"):
+            # A hole in the middle: page 2 is absent but later pages exist.
+            page = Path(path).stem
+            if page == "2":
+                self._send_bytes(404, b"not found", "text/plain")
+            else:
+                self._send_bytes(200, JPEG_BYTES, "image/jpeg")
             return
         self._send_bytes(404, b"not found", "text/plain")
 
@@ -233,6 +259,21 @@ class FixtureHandler(BaseHTTPRequestHandler):
             'attachment; filename="resumed.pdf"',
             {"Accept-Ranges": "bytes", "ETag": etag},
         )
+
+    def do_HEAD(self) -> None:
+        parsed = urlsplit(self.path)
+        path = parsed.path
+        if path.startswith("/imageset/truncated/"):
+            page = Path(path).stem
+            status = 200 if page.isdigit() and int(page) <= 3 else 404
+            self._send_bytes(status, b"", "image/jpeg")
+            return
+        if path.startswith("/imageset/gap/"):
+            page = Path(path).stem
+            status = 404 if page == "2" else 200
+            self._send_bytes(status, b"", "image/jpeg")
+            return
+        self._send_bytes(404, b"", "text/plain")
 
     def _send_document(
         self,

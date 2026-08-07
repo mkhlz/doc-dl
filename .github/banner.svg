@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="doc-dl — a resilient command-line document downloader">
+  <title>doc-dl — a resilient command-line document downloader</title>
+
+  <rect width="1200" height="320" fill="#05080d"/>
+
+  <g transform="translate(150 78)">
+    <!-- Stacked sheets behind the front document -->
+    <rect x="4" y="16" width="86" height="112" rx="10" fill="none" stroke="#1b2430" stroke-width="7"/>
+    <rect x="20" y="8" width="86" height="112" rx="10" fill="none" stroke="#283444" stroke-width="7"/>
+
+    <!-- Front document with a folded corner -->
+    <path d="M40 0h58l30 30v98a10 10 0 0 1-10 10H40a10 10 0 0 1-10-10V10A10 10 0 0 1 40 0Z"
+          fill="none" stroke="#f4f7fb" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M97 1v29h30" fill="none" stroke="#f4f7fb" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+
+    <!-- Text lines on the page -->
+    <g stroke="#f4f7fb" stroke-width="7" stroke-linecap="round">
+      <path d="M50 52h58"/>
+      <path d="M50 74h58"/>
+      <path d="M50 96h26"/>
+    </g>
+
+    <!-- Download arrow -->
+    <g stroke="#2f88ff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M96 78v42"/>
+      <path d="M78 104l18 18 18-18"/>
+    </g>
+  </g>
+
+  <text x="380" y="168"
+        font-family="'JetBrains Mono','SFMono-Regular','DejaVu Sans Mono','Consolas',monospace"
+        font-size="118" font-weight="700" letter-spacing="6">
+    <tspan fill="#f4f7fb">doc-</tspan><tspan fill="#2f88ff">dl</tspan>
+  </text>
+
+  <text x="382" y="236"
+        font-family="'JetBrains Mono','SFMono-Regular','DejaVu Sans Mono','Consolas',monospace"
+        font-size="25" font-weight="400" letter-spacing="7.5" fill="#7f8b9c">
+    A RESILIENT COMMAND-LINE
+  </text>
+  <text x="382" y="272"
+        font-family="'JetBrains Mono','SFMono-Regular','DejaVu Sans Mono','Consolas',monospace"
+        font-size="25" font-weight="400" letter-spacing="7.5" fill="#7f8b9c">
+    DOCUMENT DOWNLOADER
+  </text>
+</svg>

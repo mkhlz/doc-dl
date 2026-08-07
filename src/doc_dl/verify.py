@@ -27,6 +27,11 @@ MEDIA_TYPE_EXTENSIONS: dict[str, str] = {
     "text/csv": ".csv",
 }
 
+# Plain-text responses are far more often telemetry beacons, analytics pings,
+# or API chatter than real documents, so they are not treated as document-like
+# on their content type alone the way binary document formats are.
+TEXT_MEDIA_TYPES = {"text/plain", "text/markdown", "text/csv"}
+
 DOCUMENT_EXTENSIONS = {
     ".pdf",
     ".epub",
@@ -86,11 +91,18 @@ def response_looks_document_like(
     content_disposition: str | None,
 ) -> bool:
     normalized_type = base_media_type(media_type)
+    attachment = bool(content_disposition and "attachment" in content_disposition.casefold())
+    extension = Path(urlsplit(url).path).suffix.casefold()
+    if normalized_type in TEXT_MEDIA_TYPES:
+        # A text/plain body needs corroborating evidence that it is really a
+        # document: an explicit attachment disposition, or a document
+        # extension on the URL. Otherwise endpoints such as Cloudflare's
+        # /cdn-cgi/trace get mistaken for the document being downloaded.
+        return attachment or extension in DOCUMENT_EXTENSIONS
     if normalized_type in MEDIA_TYPE_EXTENSIONS:
         return True
-    if content_disposition and "attachment" in content_disposition.casefold():
+    if attachment:
         return True
-    extension = Path(urlsplit(url).path).suffix.casefold()
     return extension in DOCUMENT_EXTENSIONS
 
 

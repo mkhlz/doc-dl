@@ -115,14 +115,17 @@ class DownloadEngine:
                     Provenance.ORIGINAL,
                 )
 
+        reconstruction_error: DocDlError | None = None
         if not request.original_only and request.allow_render:
-            image_result = self._attempt_image_reconstruction(
+            image_result, reconstruction_error = self._attempt_image_reconstruction(
                 provider, landing_pages, request, records, started
             )
             if image_result:
                 return image_result
 
         if not request.browser_enabled:
+            if reconstruction_error:
+                raise reconstruction_error
             raise DocDlError(
                 "candidate_not_found",
                 "No verified document was found without browser escalation",
@@ -143,6 +146,8 @@ class DownloadEngine:
                 exc.message,
                 self._elapsed(browser_started),
             )
+            if reconstruction_error:
+                raise reconstruction_error from exc
             raise
 
         self._record(
@@ -202,12 +207,25 @@ class DownloadEngine:
             and not discovery.access_denied
         ):
             render_started = time.monotonic()
-            fallback = browser.discover(
-                provider,
-                source_url,
-                request,
-                force_render=True,
-            )
+            try:
+                fallback = browser.discover(
+                    provider,
+                    source_url,
+                    request,
+                    force_render=True,
+                )
+            except DocDlError as exc:
+                self._record(
+                    records,
+                    "browser-render-fallback",
+                    StrategyStatus.FAILED,
+                    exc.identifier,
+                    exc.message,
+                    self._elapsed(render_started),
+                )
+                if reconstruction_error:
+                    raise reconstruction_error from exc
+                raise
             self._record(
                 records,
                 "browser-render-fallback",
@@ -250,6 +268,8 @@ class DownloadEngine:
             )
         if discovery.access_denied:
             raise DocDlError("access_denied", "The current profile cannot access this document")
+        if reconstruction_error:
+            raise reconstruction_error
         raise DocDlError(
             "candidate_not_found",
             "No verified original or reconstructable document was found",
@@ -313,7 +333,7 @@ class DownloadEngine:
         request: DownloadRequest,
         records: list[StrategyRecord],
         started: float,
-    ) -> DownloadResult | None:
+    ) -> tuple[DownloadResult | None, DocDlError | None]:
         for landing in landing_pages:
             image_set = provider.image_pages_from_html(landing.html, landing.url)
             if not image_set or not image_set.image_urls:
@@ -332,7 +352,10 @@ class DownloadEngine:
                     exc.message,
                     self._elapsed(reconstruct_started),
                 )
-                return None
+                # Returned so the caller can surface this instead of whatever
+                # the later fallbacks happen to say: this provider knew how to
+                # rebuild the document, so its failure is the real cause.
+                return None, exc
             self._record(
                 records,
                 "image-reconstruction",
@@ -341,7 +364,7 @@ class DownloadEngine:
                 f"Reconstructed {page_count} page(s) from known page image URLs",
                 self._elapsed(reconstruct_started),
             )
-            return self._commit_local_artifact(
+            committed = self._commit_local_artifact(
                 local_path,
                 image_set.title or "document",
                 "application/pdf",
@@ -352,7 +375,8 @@ class DownloadEngine:
                 Provenance.RECONSTRUCTED,
                 expected_pages=page_count,
             )
-        return None
+            return committed, None
+        return None, None
 
     def _finish_http(
         self,

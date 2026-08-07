@@ -1,4 +1,14 @@
-# doc-dl
+<div align="center">
+
+[![doc-dl](https://raw.githubusercontent.com/mkhlz/doc-dl/master/.github/banner.svg)](#readme)
+
+[![Release version](https://img.shields.io/github/v/release/mkhlz/doc-dl?color=brightgreen&label=Latest&style=for-the-badge)](#installation "Installation")
+[![Python Version](https://img.shields.io/badge/python-%3E%3D3.11-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://github.com/mkhlz/doc-dl/blob/master/pyproject.toml "Python Version")
+[![Providers](https://img.shields.io/badge/providers-3-9cf.svg?style=for-the-badge)](#provider-support "Provider support")
+[![License: MIT](https://img.shields.io/badge/-MIT-red.svg?style=for-the-badge)](LICENSE "License")
+[![Commits](https://img.shields.io/github/commit-activity/m/mkhlz/doc-dl?label=commits&style=for-the-badge)](https://github.com/mkhlz/doc-dl/commits "Commit History")
+
+</div>
 
 `doc-dl` is a command-line downloader for documents that do not always behave
 like ordinary download links. Give it a public document or landing-page URL and
@@ -10,6 +20,24 @@ It is built for the slightly annoying reality of modern document sites: pages
 that hide the file behind JavaScript, viewers that lazy-load pages, redirects,
 and downloads that fail halfway through. The goal is simple: get a usable,
 verified file or get a clear reason why that was not possible.
+
+* [INSTALLATION](#quickstart)
+    * [Windows](#windows)
+    * [macOS or Linux](#macos-or-linux)
+    * [Other installation methods](#other-installation-methods)
+    * [Uninstall](#uninstall)
+* [USAGE](#download-a-document)
+    * [Try it with real sites](#try-it-with-real-sites)
+    * [Everyday downloads](#everyday-downloads)
+    * [Download options](#download-options)
+    * [When a login is needed](#when-a-login-is-needed)
+    * [Useful commands](#useful-commands)
+* [HOW IT WORKS](#how-results-are-handled)
+    * [Managing the Chromium browser runtime](#managing-the-chromium-browser-runtime)
+    * [Provider support](#provider-support)
+* [DEVELOPMENT](#development-checks)
+    * [Building portable releases](#building-portable-releases)
+    * [Field notes: issues and fixes](docs/ISSUES.md)
 
 ## What it can do
 
@@ -25,6 +53,16 @@ verified file or get a clear reason why that was not possible.
   arguments.
 
 ## Quickstart
+
+<div align="center">
+
+[![Windows](https://img.shields.io/badge/-Windows_x64-blue.svg?style=for-the-badge&logo=windows)](https://github.com/mkhlz/doc-dl/releases/latest/download/doc-dl_win.zip)
+[![Linux](https://img.shields.io/badge/-Linux_x64-red.svg?style=for-the-badge&logo=linux)](https://github.com/mkhlz/doc-dl/releases/latest/download/doc-dl_linux.tar.gz)
+[![MacOS Intel](https://img.shields.io/badge/-MacOS_Intel-lightblue.svg?style=for-the-badge&logo=apple)](https://github.com/mkhlz/doc-dl/releases/latest/download/doc-dl_macos_x64.tar.gz)
+[![MacOS ARM](https://img.shields.io/badge/-MacOS_Apple_Silicon-lightgrey.svg?style=for-the-badge&logo=apple)](https://github.com/mkhlz/doc-dl/releases/latest/download/doc-dl_macos_arm64.tar.gz)
+[![All versions](https://img.shields.io/badge/-All_Versions-grey.svg?style=for-the-badge)](https://github.com/mkhlz/doc-dl/releases)
+
+</div>
 
 The portable release includes Python and every required library, so you do not
 need to install Python yourself. There are two kinds of release:
@@ -156,6 +194,13 @@ Try these in PowerShell:
   [Scribd sample](https://www.scribd.com/document/959028055/Ten-Page-Sample)
   that does not require signing in.
 
+- **SlideShare presentation**: slide images are read straight from the page, so
+  this never needs Chromium at all:
+
+  ```powershell
+  doc-dl "https://www.slideshare.net/RachelElliottRigolino/sample-oral-report-powerpoint"
+  ```
+
 Use this pattern to keep files in your Downloads folder instead of the
 current directory:
 
@@ -204,7 +249,7 @@ the final GitHub Release shows the public filenames in the tables above.
 Python users can keep using the smaller wheel:
 
 ```powershell
-python -m pip install .\dist\doc_dl-0.1.7-py3-none-any.whl
+python -m pip install .\dist\doc_dl-0.1.8-py3-none-any.whl
 doc-dl doctor
 ```
 
@@ -359,6 +404,11 @@ defeat the purpose of choosing the full build.
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m pip wheel --no-deps . --wheel-dir dist
 ```
+
+[docs/ISSUES.md](docs/ISSUES.md) records real failures hit against live sites,
+their root causes, and how each was fixed. Worth reading before debugging a
+similar report: several of those symptoms turned out to be something other than
+what the error message said.
 
 ## Building portable releases
 
