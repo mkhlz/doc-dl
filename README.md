@@ -5,7 +5,7 @@
 [![Release version](https://img.shields.io/github/v/release/mkhlz/doc-dl?color=brightgreen&label=Latest&style=for-the-badge)](#installation "Installation")
 [![Python Version](https://img.shields.io/badge/python-%3E%3D3.11-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://github.com/mkhlz/doc-dl/blob/master/pyproject.toml "Python Version")
 [![Providers](https://img.shields.io/badge/providers-3-9cf.svg?style=for-the-badge)](#provider-support "Provider support")
-[![License: MIT](https://img.shields.io/badge/-MIT-red.svg?style=for-the-badge)](LICENSE "License")
+[![License: Non-Commercial](https://img.shields.io/badge/license-Non--Commercial-orange.svg?style=for-the-badge)](LICENSE "License")
 [![Commits](https://img.shields.io/github/commit-activity/m/mkhlz/doc-dl?label=commits&style=for-the-badge)](https://github.com/mkhlz/doc-dl/commits "Commit History")
 
 </div>
@@ -463,4 +463,9 @@ Websites can change their layouts or restrict access. In those cases,
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is free for personal, educational, research, and other
+non-commercial use.
+
+Commercial use requires prior written permission from the copyright holder.
+
+See the [LICENSE](LICENSE) file for full terms.

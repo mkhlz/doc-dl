@@ -7,6 +7,7 @@ name = "doc-dl"
 version = "0.1.9"
 description = "A reliable command-line downloader for documents on modern websites"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 authors = [
   { name = "doc-dl contributors" }
@@ -15,6 +16,7 @@ keywords = ["documents", "downloader", "pdf", "playwright", "cli"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
+  "License :: Other/Proprietary License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
