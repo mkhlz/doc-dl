@@ -104,7 +104,7 @@ def _glyph_fallback_capable() -> bool:
         return True
     return bool(
         os.environ.get("WT_SESSION")
-        or os.environ.get("ConEmuANSI") == "ON"
+        or os.environ.get("ConEmuANSI") == "ON"  # noqa: SIM112 -- ConEmu's real casing
         or os.environ.get("TERM_PROGRAM")
     )
 
