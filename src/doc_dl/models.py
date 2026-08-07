@@ -11,6 +11,7 @@ class Provenance(StrEnum):
     EXPORTED = "exported"
     RECONSTRUCTED = "reconstructed"
     PRINTED = "printed"
+    CAPTURED = "captured"
 
 
 class CandidateKind(StrEnum):
@@ -88,6 +89,37 @@ class ImagePageSet:
 
     title: str | None
     image_urls: list[str]
+
+
+@dataclass(slots=True)
+class ArchiveRequest:
+    url: str
+    output: Path | None = None
+    filename_template: str | None = None
+    profile: str = "default"
+    mode: str = "auto"
+    timeout_seconds: float = 90.0
+    overwrite: bool = False
+    write_metadata: bool = True
+
+
+@dataclass(slots=True)
+class ArchiveResult:
+    path: Path
+    filename: str
+    media_type: str
+    size: int
+    provenance: Provenance
+    source_url: str
+    final_url: str
+    title: str | None
+    byline: str | None
+    published: str | None
+    site_name: str | None
+    canonical_url: str | None
+    paywall_suspected: bool
+    elapsed_ms: int
+    page_count: int | None = None
 
 
 @dataclass(slots=True)

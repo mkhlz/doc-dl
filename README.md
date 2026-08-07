@@ -318,6 +318,44 @@ doc-dl URL --output .\downloads --filename "{provider}-{title}.{ext}"
 | `--json` | Emit newline-delimited JSON events for automation. |
 | `--quiet` | Print only errors and the final output path. |
 
+## Archiving a page (news articles, blog posts, and other web pages)
+
+`doc-dl archive` snapshots a page as a PDF instead of looking for a
+downloadable file. It tries a clean, readable article extraction first, and
+falls back to a full-page screenshot when there isn't enough readable text
+(sparse pages, or content blocked behind a paywall):
+
+```powershell
+doc-dl archive "https://example.com/news/some-article"
+```
+
+A `.doc-dl.json` metadata sidecar is written by default (opt out with
+`--no-metadata`), recording the title, byline, publish date, site name, the
+capture method used, and whether paywall indicators were detected:
+
+```json
+{
+  "title": "Harbor City Approves New Transit Line",
+  "byline": "Jordan Rivera",
+  "published": "2026-08-01T09:00:00Z",
+  "site_name": "The Harbor Gazette",
+  "provenance": "printed",
+  "paywall_suspected": false
+}
+```
+
+A page flagged `paywall_suspected: true` still produces the best capture it
+can manage (usually just the free teaser text, or a screenshot) — the flag is
+a signal to check the result, not a guarantee the capture is incomplete.
+
+| Option | What it does |
+| --- | --- |
+| `--mode auto\|readability\|screenshot` | Force the capture method instead of choosing automatically. |
+| `--profile NAME` | Use an isolated browser profile (useful for sites you're signed into). |
+| `--timeout 90s` | Set the full operation timeout. |
+| `--no-metadata` | Skip writing the `.doc-dl.json` sidecar. |
+| `--overwrite` | Replace an existing output file. |
+
 ## When a login is needed
 
 For documents your normal provider account can access, create an isolated
@@ -351,6 +389,7 @@ unverified result is not promoted to the final output path.
 doc-dl version
 doc-dl providers
 doc-dl doctor
+doc-dl archive URL
 doc-dl install-browser
 doc-dl uninstall-browser
 ```

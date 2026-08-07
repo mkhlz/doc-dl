@@ -8,12 +8,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from doc_dl import __version__
+from doc_dl.archive import PageArchiver
 from doc_dl.config import StatePaths
 from doc_dl.doctor import doctor_payload, run_doctor
 from doc_dl.engine import DownloadEngine
 from doc_dl.errors import DocDlError
 from doc_dl.events import EventSink, safe_print
-from doc_dl.models import DownloadRequest
+from doc_dl.models import ArchiveRequest, DownloadRequest
 from doc_dl.providers.registry import ProviderRegistry
 from doc_dl.runtime import (
     chromium_executable_path,
@@ -38,6 +39,7 @@ COMMANDS = {
     "uninstall-browser",
     "clean",
     "version",
+    "archive",
 }
 
 
@@ -89,6 +91,40 @@ def _download_parser() -> DocDlArgumentParser:
         help="Write a redacted .doc-dl.json provenance sidecar",
     )
     parser.add_argument("--version", action="version", version=f"doc-dl {__version__}")
+    _add_output_modes(parser)
+    return parser
+
+
+def _archive_parser() -> DocDlArgumentParser:
+    parser = DocDlArgumentParser(
+        prog="doc-dl archive",
+        description="Snapshot a news article or web page as a PDF",
+    )
+    parser.add_argument("url", nargs="?", help="Page URL to archive")
+    parser.add_argument("-Url", dest="url_option", help="PowerShell-style URL compatibility form")
+    parser.add_argument("-o", "--output", type=Path, help="Output file or directory")
+    parser.add_argument(
+        "--filename",
+        dest="filename_template",
+        help="Filename template using {title}, {ext}, {provider}, or {filename}",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("auto", "readability", "screenshot"),
+        default="auto",
+        help=(
+            "auto (default): clean article PDF, falling back to a full-page "
+            "screenshot when there isn't enough readable text"
+        ),
+    )
+    parser.add_argument("--profile", default="default", help="Isolated browser profile name")
+    parser.add_argument("--overwrite", action="store_true", help="Replace an existing output")
+    parser.add_argument("--timeout", default="90s", help="Total timeout, such as 60s, 5m, or 1h")
+    parser.add_argument(
+        "--no-metadata",
+        action="store_true",
+        help="Skip writing the .doc-dl.json sidecar (written by default for archives)",
+    )
     _add_output_modes(parser)
     return parser
 
@@ -260,6 +296,23 @@ def _run_download(argv: Sequence[str]) -> int:
     return 0
 
 
+def _run_archive(argv: Sequence[str]) -> int:
+    args = _archive_parser().parse_args(list(argv))
+    sink = _sink_from_args(args)
+    request = ArchiveRequest(
+        url=_resolve_url(args),
+        output=args.output,
+        filename_template=args.filename_template,
+        profile=args.profile,
+        mode=args.mode,
+        timeout_seconds=parse_duration(args.timeout),
+        overwrite=args.overwrite,
+        write_metadata=not args.no_metadata,
+    )
+    PageArchiver(sink).archive(request)
+    return 0
+
+
 def _run_login(command: str, argv: Sequence[str]) -> int:
     args = _login_parser(command).parse_args(list(argv))
     sink = _sink_from_args(args)
@@ -403,6 +456,7 @@ def _print_bare_invocation_help() -> None:
     safe_print("Quick examples:", file=sys.stdout)
     safe_print('  doc-dl "https://example.com/document.pdf"', file=sys.stdout)
     safe_print('  doc-dl -Url "https://example.com/document.pdf"', file=sys.stdout)
+    safe_print('  doc-dl archive "https://example.com/news/some-article"', file=sys.stdout)
     safe_print("  doc-dl doctor", file=sys.stdout)
 
 
@@ -438,6 +492,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             return _run_clean(command_args)
         if command == "version":
             return _run_version(command_args)
+        if command == "archive":
+            return _run_archive(command_args)
         return _run_download(arguments)
     except DocDlError as exc:
         json_mode = "--json" in arguments
