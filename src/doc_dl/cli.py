@@ -417,6 +417,11 @@ def run(argv: Sequence[str] | None = None) -> int:
     if not arguments:
         _print_bare_invocation_help()
         return 0
+    if "--version" in arguments:
+        # Route through the same renderer as `doc-dl version` rather than
+        # argparse's built-in action, which would print a bare version
+        # string and exit before the banner ever gets a chance to show.
+        return _run_version([a for a in arguments if a not in {"--version"}])
     command = arguments[0].casefold()
     command_args = arguments[1:] if command in COMMANDS else arguments
     sink: EventSink | None = None

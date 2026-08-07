@@ -90,11 +90,33 @@ def enable_utf8_output() -> None:
             continue
 
 
+def _glyph_fallback_capable() -> bool:
+    """Whether this console substitutes a fallback font for missing glyphs.
+
+    Windows Terminal, ConEmu, and VS Code's integrated terminal all do font
+    fallback, so a codepoint missing from the primary font still draws from
+    another one. The classic conhost window (the blue "Windows PowerShell"
+    console, or plain cmd.exe) does not: if the selected font -- usually
+    Consolas, which has no braille or check-mark glyphs -- lacks a codepoint,
+    it draws a tofu box even though the encoding itself round-trips fine.
+    """
+    if sys.platform != "win32":
+        return True
+    return bool(
+        os.environ.get("WT_SESSION")
+        or os.environ.get("ConEmuANSI") == "ON"
+        or os.environ.get("TERM_PROGRAM")
+    )
+
+
 def stream_handles_unicode(stream: TextIO) -> bool:
-    """Whether decorative Unicode survives this stream's encoding.
+    """Whether decorative Unicode survives this stream's encoding and font.
 
     Legacy Windows code pages turn block and braille characters into "?????",
     so the glyphs are tested against the real encoding rather than assumed.
+    A correct encoding is not enough on its own: the classic Windows console
+    can round-trip the bytes and still fail to draw them, so that is checked
+    too.
     """
     encoding = getattr(stream, "encoding", None)
     if not encoding:
@@ -103,7 +125,7 @@ def stream_handles_unicode(stream: TextIO) -> bool:
         "█░⠋✔▲✖·→".encode(encoding)
     except (LookupError, UnicodeEncodeError):
         return False
-    return True
+    return _glyph_fallback_capable()
 
 
 @dataclass(frozen=True, slots=True)
