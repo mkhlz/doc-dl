@@ -106,14 +106,21 @@ def response_looks_document_like(
     return extension in DOCUMENT_EXTENSIONS
 
 
+_REPLACEABLE_SUFFIXES = {"", ".bin", ".download", ".php", ".aspx", ".html", ".htm"}
+
+
 def ensure_document_extension(filename: str, media_type: str) -> str:
     expected = extension_for_media_type(media_type)
     if not expected:
         return filename
     suffix = Path(filename).suffix.casefold()
-    if suffix in DOCUMENT_EXTENSIONS:
+    if suffix == expected:
         return filename
-    if suffix in {"", ".bin", ".download", ".php", ".aspx", ".html", ".htm"}:
+    # A document extension that contradicts the verified content is worse than
+    # no extension at all: SlideShare titles carry the uploader's original
+    # ".pptx" even though what is delivered is a PDF, and the file would then
+    # fail to open. The verified media type wins.
+    if suffix in DOCUMENT_EXTENSIONS or suffix in _REPLACEABLE_SUFFIXES:
         stem = filename[: -len(suffix)] if suffix else filename
         return f"{stem}{expected}"
     return f"{filename}{expected}"

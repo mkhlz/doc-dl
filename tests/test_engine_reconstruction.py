@@ -36,6 +36,49 @@ class _ImageSetProvider(Provider):
         return ImagePageSet(title="Fixture Deck", image_urls=self._urls)
 
 
+class _DeckProvider(Provider):
+    """A named provider for the fixture host that can rebuild its own pages,
+    standing in for SlideShare."""
+
+    name = "slideshare"
+    supports_render = True
+
+    def __init__(self, urls: list[str]) -> None:
+        self._urls = urls
+
+    def match(self, url: str) -> int:
+        del url
+        return 100
+
+    def image_pages_from_html(self, html: str, url: str) -> ImagePageSet:
+        del html, url
+        return ImagePageSet(title="The Deck", image_urls=self._urls)
+
+
+def test_deck_wins_over_a_paper_it_merely_cites(
+    fixture_server: FixtureServer,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slide deck citing a downloadable PDF must download as the deck."""
+    monkeypatch.setenv("DOC_DL_STATE_DIR", str(tmp_path / "state"))
+    provider = _DeckProvider([fixture_server.url(f"/imageset/pages/{n}.jpg") for n in range(1, 4)])
+    engine = DownloadEngine(quiet_sink(), registry=ProviderRegistry([provider]))
+
+    result = engine.download(
+        DownloadRequest(
+            url=fixture_server.url("/site/deck-citing-a-paper.html"),
+            output=tmp_path / "output",
+            browser_enabled=False,
+            timeout_seconds=30,
+        )
+    )
+
+    assert result.page_count == 3
+    assert "The Deck" in result.filename
+    assert result.path.is_file()
+
+
 def test_reconstruction_failure_is_surfaced_not_masked_by_fallbacks(
     fixture_server: FixtureServer,
     tmp_path,

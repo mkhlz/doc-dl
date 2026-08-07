@@ -27,6 +27,7 @@ class SlideShareProvider(Provider):
     name = "slideshare"
     supports_authentication = False
     supports_render = True
+    document_host_suffixes = ("slidesharecdn.com",)
 
     def match(self, url: str) -> int:
         return 100 if _SLIDESHARE_URL.match(url) else 0

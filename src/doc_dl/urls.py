@@ -42,6 +42,27 @@ def validate_url(url: str) -> str:
     return candidate
 
 
+def registrable_domain(host: str) -> str:
+    """The last two labels of a hostname, as a cheap stand-in for the
+    registrable domain. Good enough to tell 'this site' from 'somebody
+    else's site' without carrying a public-suffix dependency."""
+    labels = [label for label in host.casefold().strip(".").split(".") if label]
+    return ".".join(labels[-2:]) if len(labels) >= 2 else ".".join(labels)
+
+
+def same_site(host: str, other: str) -> bool:
+    if not host or not other:
+        return False
+    return registrable_domain(host) == registrable_domain(other)
+
+
+def host_of(url: str) -> str:
+    try:
+        return (urlsplit(url).hostname or "").casefold()
+    except ValueError:
+        return ""
+
+
 def normalized_url(url: str) -> str:
     parts = urlsplit(validate_url(url))
     scheme = parts.scheme.casefold()

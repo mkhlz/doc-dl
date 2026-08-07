@@ -10,6 +10,11 @@ class Provider:
     supports_authentication = False
     supports_render = True
 
+    # Extra hosts, beyond the page's own site, that serve this provider's real
+    # document files. Used to tell the page's own document apart from
+    # third-party files it merely links to, such as works cited on a slide.
+    document_host_suffixes: tuple[str, ...] = ()
+
     def match(self, url: str) -> int:
         return 0
 

@@ -30,6 +30,7 @@ class ScribdProvider(Provider):
     name = "scribd"
     supports_authentication = True
     supports_render = True
+    document_host_suffixes = ("scribdassets.com",)
 
     def match(self, url: str) -> int:
         if _SCRIBD_DOCUMENT.match(url) or _SCRIBD_EMBED.match(url):

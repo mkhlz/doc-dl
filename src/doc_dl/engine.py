@@ -25,7 +25,7 @@ from doc_dl.models import (
 from doc_dl.providers.base import Provider
 from doc_dl.providers.registry import ProviderRegistry
 from doc_dl.redaction import redact_url
-from doc_dl.urls import validate_url
+from doc_dl.urls import host_of, same_site, validate_url
 from doc_dl.verify import ensure_document_extension, verify_document
 
 
@@ -77,6 +77,18 @@ class DownloadEngine:
                 Provenance.ORIGINAL,
             )
 
+        # A provider that recognises this page knows what it actually hosts, so
+        # give its own reconstruction precedence over links merely found on the
+        # page. Otherwise a slide deck that cites a PDF would download the
+        # citation instead of the deck.
+        reconstruction_error: DocDlError | None = None
+        if not request.original_only and request.allow_render:
+            image_result, reconstruction_error = self._attempt_image_reconstruction(
+                provider, landing_pages, request, records, started
+            )
+            if image_result:
+                return image_result
+
         static_candidates: list[DocumentCandidate] = []
         for landing in landing_pages:
             static_candidates.extend(
@@ -88,6 +100,21 @@ class DownloadEngine:
                 )
             )
         static_candidates = self._dedupe_candidates(static_candidates)
+        static_candidates, third_party = self._split_third_party_candidates(
+            static_candidates, provider, source_url
+        )
+        if third_party:
+            self._record(
+                records,
+                "static-html",
+                StrategyStatus.SKIPPED,
+                "third_party_reference",
+                (
+                    f"Ignored {len(third_party)} link(s) to other sites; on a "
+                    f"{provider.name} page those are references, not the document"
+                ),
+                0,
+            )
         self._record(
             records,
             "static-html",
@@ -114,14 +141,6 @@ class DownloadEngine:
                     started,
                     Provenance.ORIGINAL,
                 )
-
-        reconstruction_error: DocDlError | None = None
-        if not request.original_only and request.allow_render:
-            image_result, reconstruction_error = self._attempt_image_reconstruction(
-                provider, landing_pages, request, records, started
-            )
-            if image_result:
-                return image_result
 
         if not request.browser_enabled:
             if reconstruction_error:
@@ -162,7 +181,10 @@ class DownloadEngine:
             self._elapsed(browser_started),
         )
 
-        for candidate in self._dedupe_candidates(discovery.candidates):
+        browser_candidates, _ = self._split_third_party_candidates(
+            self._dedupe_candidates(discovery.candidates), provider, source_url
+        )
+        for candidate in browser_candidates:
             result = self._attempt_http(candidate, request, records, [])
             if result:
                 return self._finish_http(
@@ -325,6 +347,38 @@ class DownloadEngine:
             self._elapsed(started),
         )
         return result
+
+    @staticmethod
+    def _split_third_party_candidates(
+        candidates: list[DocumentCandidate],
+        provider: Provider,
+        source_url: str,
+    ) -> tuple[list[DocumentCandidate], list[DocumentCandidate]]:
+        """Separate documents plausibly belonging to this page from files it
+        merely links to elsewhere.
+
+        Only applied for providers that recognise the site: on a known
+        document host, a link pointing off-site is a reference (a work cited on
+        a slide, a related paper), not the document being requested. The
+        generic provider has no such context, so its candidates are unchanged.
+        """
+        if provider.name == "generic":
+            return candidates, []
+
+        page_host = host_of(source_url)
+        if not page_host:
+            return candidates, []
+
+        owned: list[DocumentCandidate] = []
+        foreign: list[DocumentCandidate] = []
+        for candidate in candidates:
+            candidate_host = host_of(candidate.url)
+            trusted = same_site(candidate_host, page_host) or any(
+                candidate_host == suffix or candidate_host.endswith(f".{suffix}")
+                for suffix in provider.document_host_suffixes
+            )
+            (owned if trusted else foreign).append(candidate)
+        return owned, foreign
 
     def _attempt_image_reconstruction(
         self,

@@ -5,8 +5,37 @@ from pathlib import Path
 import pytest
 
 from doc_dl.errors import DocDlError
-from doc_dl.verify import response_looks_document_like, verify_document
+from doc_dl.verify import (
+    ensure_document_extension,
+    response_looks_document_like,
+    verify_document,
+)
 from tests.fixture_server import DOCX_BYTES, PDF_BYTES
+
+
+def test_extension_is_corrected_when_it_contradicts_the_content() -> None:
+    # SlideShare titles keep the uploader's original filename, so a
+    # reconstructed PDF would otherwise be saved as an unopenable ".pptx".
+    assert (
+        ensure_document_extension("ISLAMIC-PHILOSOPHY-2-pptx.pptx", "application/pdf")
+        == "ISLAMIC-PHILOSOPHY-2-pptx.pdf"
+    )
+
+
+def test_matching_extension_is_left_alone() -> None:
+    assert ensure_document_extension("report.pdf", "application/pdf") == "report.pdf"
+    docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    assert ensure_document_extension("notes.docx", docx) == "notes.docx"
+
+
+def test_missing_or_placeholder_extension_is_filled_in() -> None:
+    assert ensure_document_extension("document", "application/pdf") == "document.pdf"
+    assert ensure_document_extension("download.bin", "application/pdf") == "download.pdf"
+
+
+def test_unrelated_suffix_is_appended_rather_than_replaced() -> None:
+    # "2024.1" is part of the name, not a file type, so it must survive.
+    assert ensure_document_extension("report-2024.1", "application/pdf") == "report-2024.1.pdf"
 
 
 def test_plain_text_telemetry_response_is_not_document_like() -> None:

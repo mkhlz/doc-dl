@@ -249,7 +249,7 @@ the final GitHub Release shows the public filenames in the tables above.
 Python users can keep using the smaller wheel:
 
 ```powershell
-python -m pip install .\dist\doc_dl-0.1.8-py3-none-any.whl
+python -m pip install .\dist\doc_dl-0.1.9-py3-none-any.whl
 doc-dl doctor
 ```
 
