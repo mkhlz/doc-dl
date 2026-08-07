@@ -43,3 +43,10 @@ class DropboxProvider(Provider):
         query = [(key, value) for key, value in parse_qsl(parts.query) if key != "dl"]
         query.append(("dl", "1"))
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+
+    def access_hint(self) -> str | None:
+        return (
+            "This Dropbox link is not publicly shared. Ask the owner to set it to "
+            "'Anyone with the link', and check the link still carries its rlkey "
+            "value, which newer share links need."
+        )

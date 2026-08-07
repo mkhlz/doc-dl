@@ -43,6 +43,7 @@ class DownloadEngine:
 
     def download(self, request: DownloadRequest) -> DownloadResult:
         started = time.monotonic()
+        self._access_error: DocDlError | None = None
         request.url = validate_url(request.url)
         provider = self.registry.select(request.url, request.forced_provider)
         source_url = provider.normalize(request.url)
@@ -145,6 +146,7 @@ class DownloadEngine:
         if not request.browser_enabled:
             if reconstruction_error:
                 raise reconstruction_error
+            self._raise_access_error(provider)
             raise DocDlError(
                 "candidate_not_found",
                 "No verified document was found without browser escalation",
@@ -286,15 +288,37 @@ class DownloadEngine:
         if discovery.authentication_required:
             raise DocDlError(
                 "authentication_required",
-                f"Run 'doc-dl login {provider.name}' and retry the document",
+                (
+                    f"Run 'doc-dl login {provider.name}' and retry the document"
+                    if provider.supports_authentication
+                    else "This document is only available to a signed-in session"
+                ),
+                detail=provider.access_hint(),
             )
         if discovery.access_denied:
-            raise DocDlError("access_denied", "The current profile cannot access this document")
+            raise DocDlError(
+                "access_denied",
+                "The current profile cannot access this document",
+                detail=provider.access_hint(),
+            )
         if reconstruction_error:
             raise reconstruction_error
+        self._raise_access_error(provider)
         raise DocDlError(
             "candidate_not_found",
             "No verified original or reconstructable document was found",
+        )
+
+    def _raise_access_error(self, provider: Provider) -> None:
+        """Re-raise a sign-in or permission failure seen earlier, with whatever
+        the provider can tell the person about getting access."""
+        error = self._access_error
+        if not error:
+            return
+        raise DocDlError(
+            error.identifier,
+            error.message,
+            detail=provider.access_hint() or error.detail,
         )
 
     def _attempt_http(
@@ -317,6 +341,11 @@ class DownloadEngine:
                 "corrupt_document",
                 "verification_failed",
             }:
+                if exc.identifier in {"authentication_required", "access_denied"}:
+                    # Being told the file is private is far more useful than the
+                    # generic "nothing found" a later stage would report, so keep
+                    # it to raise once every other strategy has been tried.
+                    self._access_error = self._access_error or exc
                 self._record(
                     records,
                     candidate.strategy,

@@ -27,6 +27,11 @@ class Provider:
     def login_url(self) -> str | None:
         return None
 
+    def access_hint(self) -> str | None:
+        """Guidance shown when a download stops for sign-in or permission
+        reasons, explaining what would let the person get the file."""
+        return None
+
     def page_title(self, page: Any) -> str | None:
         """An accurate document title, if the provider can find one better than
         the browser page's own <title>. Return None to fall back to page.title()."""

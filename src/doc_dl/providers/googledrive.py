@@ -60,3 +60,10 @@ class GoogleDriveProvider(Provider):
     @classmethod
     def _file_id(cls, url: str) -> str | None:
         return cls._file_parts(url)[0]
+
+    def access_hint(self) -> str | None:
+        return (
+            "This Google Drive file is not shared publicly. Ask the owner to set it "
+            "to 'Anyone with the link', and keep any resourcekey value in the URL, "
+            "which older shared files require."
+        )
