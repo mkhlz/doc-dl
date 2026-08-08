@@ -23,6 +23,8 @@ $archivePath = Join-Path $temporaryRoot $assetName
 $checksumPath = Join-Path $temporaryRoot "SHA2-256SUMS"
 $installRoot = Join-Path $env:LOCALAPPDATA "Programs\doc-dl"
 $backupRoot = $null
+# Keep in sync with RELEASE_NAME in src/doc_dl/cli.py.
+$releaseName = "Alexandria"
 
 # A returning user has already met the tool, so the wordmark is shown only the
 # first time. Everything decorative degrades on a console that cannot draw it.
@@ -34,7 +36,12 @@ if ($script:WasInstalled) {
     }
     catch { $script:PreviousVersion = $null }
 }
-$script:Fancy = [Console]::OutputEncoding.CodePage -eq 65001
+# [Console]::OutputEncoding reflects the process's code page, not whether the
+# terminal itself can draw the glyphs -- Windows Terminal renders full
+# Unicode regardless of that setting, while the classic conhost window never
+# will no matter what it's set to. WT_SESSION/ConEmuANSI/TERM_PROGRAM are the
+# actual signal (same check used by the installed binary itself).
+$script:Fancy = [bool]$env:WT_SESSION -or ($env:ConEmuANSI -eq "ON") -or [bool]$env:TERM_PROGRAM
 
 function Write-Step {
     param([string]$Label, [string]$Detail = "")
@@ -64,11 +71,12 @@ function Write-Banner {
         }
     }
     else {
-        Write-Host "    _                 _ _"        -ForegroundColor White
-        Write-Host "   | |               | | |"       -ForegroundColor White
-        Write-Host " __| | ___   ___    _| | |"       -ForegroundColor White
-        Write-Host "/ _`` |/ _ \ / __|  / _`` | |"    -ForegroundColor White
-        Write-Host "\__,_|\___/ \___|  \__,_|_|"      -ForegroundColor White
+        Write-Host "   ######    #####    #####            ######   ##"       -ForegroundColor White
+        Write-Host "   ##   ##  ##   ##  ##   ##           ##   ##  ##"       -ForegroundColor White
+        Write-Host "   ##   ##  ##   ##  ##        #####   ##   ##  ##"       -ForegroundColor White
+        Write-Host "   ##   ##  ##   ##  ##                ##   ##  ##"       -ForegroundColor White
+        Write-Host "   ##   ##  ##   ##  ##   ##           ##   ##  ##"       -ForegroundColor White
+        Write-Host "   ######    #####    #####            ######   #######"  -ForegroundColor White
     }
     Write-Host ""
     Write-Host "        a resilient command-line document downloader" -ForegroundColor DarkGray
@@ -128,10 +136,10 @@ try {
 
     if ($script:WasInstalled) {
         if ($script:PreviousVersion -and $script:PreviousVersion -ne $newVersion) {
-            Write-Step "Updated doc-dl" "$($script:PreviousVersion) -> $newVersion"
+            Write-Step "Updated doc-dl" "$($script:PreviousVersion) -> $newVersion `"$releaseName`""
         }
         else {
-            Write-Step "Reinstalled doc-dl" $newVersion
+            Write-Step "Reinstalled doc-dl" "$newVersion `"$releaseName`""
         }
         Write-Host ""
     }
@@ -141,7 +149,7 @@ try {
         Write-Step "Installed" $installRoot
         Write-Step "On PATH" "open a new terminal to pick it up"
         Write-Host ""
-        Write-Host "  doc-dl $newVersion is ready." -ForegroundColor Green
+        Write-Host "  doc-dl $newVersion `"$releaseName`" is ready." -ForegroundColor Green
         Write-Host ""
         Write-Host "  Try it" -ForegroundColor DarkGray -NoNewline
         Write-Host "  doc-dl " -NoNewline
