@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import shutil
 import time
@@ -13,6 +12,7 @@ from doc_dl.discovery import discover_document_candidates
 from doc_dl.errors import DocDlError
 from doc_dl.events import EventSink
 from doc_dl.filenames import apply_filename_template, resolve_output_path, sanitize_filename
+from doc_dl.history import append_history_entry
 from doc_dl.http import HttpDownloader, LandingPage, RetrievedDocument
 from doc_dl.imageset import ImageSetReconstructor
 from doc_dl.models import (
@@ -655,24 +655,11 @@ class DownloadEngine:
 
     def _complete(self, result: DownloadResult, request: DownloadRequest) -> None:
         if request.write_metadata:
-            sidecar = result.path.with_name(f"{result.path.name}.doc-dl.json")
             payload = asdict(result)
             payload["path"] = str(result.path)
             payload["source_url"] = redact_url(result.source_url)
-            temporary = sidecar.with_suffix(f"{sidecar.suffix}.tmp")
-            try:
-                temporary.write_text(
-                    json.dumps(payload, ensure_ascii=False, indent=2, default=str),
-                    encoding="utf-8",
-                )
-                os.replace(temporary, sidecar)
-            except OSError as exc:
-                temporary.unlink(missing_ok=True)
-                raise DocDlError(
-                    "filesystem_failure",
-                    "The metadata sidecar could not be written",
-                    detail=str(exc),
-                ) from exc
+            payload["event"] = "download"
+            append_history_entry(payload)
 
         self.sink.emit(
             "complete",

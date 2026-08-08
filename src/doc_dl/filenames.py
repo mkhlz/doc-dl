@@ -9,6 +9,11 @@ from urllib.parse import unquote, urlsplit
 from doc_dl.errors import DocDlError
 
 _INVALID_FILENAME_CHARS = re.compile(r"[<>:\"/\\|?*\x00-\x1f]")
+# Commas and quote marks (straight or curly) are all valid filename
+# characters, but read as clutter in a title-derived name -- dropped
+# entirely rather than swapped for an underscore like the truly invalid
+# characters above.
+_DECORATIVE_MARKS = re.compile("[,'\"‘’“”]")  # noqa: RUF001 -- real curly quote marks
 _MULTIPLE_SPACES = re.compile(r"\s+")
 _WINDOWS_RESERVED = {
     "CON",
@@ -22,6 +27,7 @@ _WINDOWS_RESERVED = {
 
 def sanitize_filename(value: str | None, fallback: str = "document") -> str:
     text = unicodedata.normalize("NFKC", unquote(value or ""))
+    text = _DECORATIVE_MARKS.sub("", text)
     text = _INVALID_FILENAME_CHARS.sub("_", text)
     text = _MULTIPLE_SPACES.sub(" ", text).strip(" .")
     if not text:

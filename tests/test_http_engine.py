@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -121,3 +122,28 @@ def test_accepts_text_attachment_with_generic_media_type(
     assert isinstance(result, RetrievedDocument)
     assert result.path.suffix == ".txt"
     assert result.media_type == "text/plain"
+
+
+def test_write_metadata_records_to_the_central_history_log_not_a_sidecar(
+    fixture_server: FixtureServer,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_dir = tmp_path / "state"
+    monkeypatch.setenv("DOC_DL_STATE_DIR", str(state_dir))
+    output_dir = tmp_path / "output"
+    result = DownloadEngine(quiet_sink()).download(
+        DownloadRequest(
+            url=fixture_server.url("/files/sample.pdf"),
+            output=output_dir,
+            write_metadata=True,
+        )
+    )
+    # Pasting a link and getting a file back stays exactly that: the
+    # download folder holds only the file, never a .doc-dl.json alongside it.
+    assert list(output_dir.iterdir()) == [result.path]
+
+    entries = (state_dir / "history.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    payload = json.loads(entries[-1])
+    assert payload["path"] == str(result.path)
+    assert payload["provenance"] == "original"

@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from doc_dl.config import StatePaths
+from doc_dl.history import history_path
 from doc_dl.runtime import build_variant, chromium_executable_path, effective_browsers_path
 from doc_dl.ui import stream_handles_unicode
 
@@ -71,6 +72,10 @@ def run_doctor(state: StatePaths | None = None) -> list[DoctorCheck]:
         checks.append(DoctorCheck("state-directory", True, str(paths.root)))
     except OSError as exc:
         checks.append(DoctorCheck("state-directory", False, str(exc)))
+
+    log = history_path(paths)
+    detail = str(log) if log.exists() else f"{log} (nothing recorded yet)"
+    checks.append(DoctorCheck("history", True, detail, required=False))
 
     # Which output style this terminal gets, so a plain-looking install can be
     # explained rather than guessed at.

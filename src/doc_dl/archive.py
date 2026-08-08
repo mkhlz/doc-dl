@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import json
 import logging
 import math
 import os
@@ -21,6 +20,7 @@ from doc_dl.config import StatePaths
 from doc_dl.errors import DocDlError
 from doc_dl.events import EventSink
 from doc_dl.filenames import apply_filename_template, resolve_output_path, sanitize_filename
+from doc_dl.history import append_history_entry
 from doc_dl.models import ArchiveRequest, ArchiveResult, Provenance
 from doc_dl.render import (
     append_single_page,
@@ -227,6 +227,9 @@ class PageArchiver:
             request.url,
             profile=request.profile,
             timeout_seconds=request.timeout_seconds,
+            max_pages=request.max_pages,
+            page_range=request.page_range,
+            wait_for_selector=request.wait_for_selector,
         )
         verification = verify_document(output, media_type_hint="application/pdf")
         captured_at = datetime.now(UTC)
@@ -247,16 +250,24 @@ class PageArchiver:
         *,
         profile: str = "default",
         timeout_seconds: float = 90.0,
+        max_pages: int | None = None,
+        page_range: tuple[int, int] | None = None,
+        wait_for_selector: str | None = None,
     ) -> tuple[Path, ArticleExtraction, str]:
-        """Snapshot a page as a PDF, one screenshot per scrolled viewport --
-        the same page-by-page capture used for slide-deck reconstruction,
-        just scrolling a normal page instead of stepping through a viewer.
+        """Snapshot a page as a PDF: one continuous full-page screenshot,
+        sliced into page-sized chunks in Python.
 
         Returns the temporary PDF path, what little metadata could be read
         off the page, and the final URL, leaving verification and committing
         the file to its final location up to the caller -- `archive()` for
         the standalone command, or `DownloadEngine` when it falls back to
         this as a last resort for a page with no downloadable document.
+        `max_pages` and `page_range` both trim the slice -- useful for a
+        long feed-style page that bunches the linked article together with
+        unrelated ones below it (the CLI treats them as mutually exclusive).
+        `wait_for_selector`, if given, is waited for before anything else
+        happens, for a page that needs more than the built-in settle
+        heuristics correctly guess.
         """
         url = validate_url(url)
         try:
@@ -304,7 +315,15 @@ class PageArchiver:
                         identifier, "Chromium could not be started", detail=message
                     ) from exc
                 try:
-                    return self._capture_in_context(context, url, timeout_seconds, timeout_ms)
+                    return self._capture_in_context(
+                        context,
+                        url,
+                        timeout_seconds,
+                        timeout_ms,
+                        max_pages,
+                        page_range,
+                        wait_for_selector,
+                    )
                 finally:
                     context.close()
         except DocDlError:
@@ -320,6 +339,9 @@ class PageArchiver:
         url: str,
         timeout_seconds: float,
         timeout_ms: float,
+        max_pages: int | None,
+        page_range: tuple[int, int] | None,
+        wait_for_selector: str | None,
     ) -> tuple[Path, ArticleExtraction, str]:
         page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(min(timeout_ms, 30_000))
@@ -332,6 +354,25 @@ class PageArchiver:
 
         final_url = page.url
         deadline = time.monotonic() + timeout_seconds
+        if wait_for_selector:
+            self.sink.emit(
+                "strategy",
+                message=f"Waiting for {wait_for_selector!r} before capturing",
+                strategy="wait-for-selector",
+                status="started",
+            )
+            try:
+                page.wait_for_selector(
+                    wait_for_selector, state="visible", timeout=self._remaining_ms(deadline)
+                )
+            except Exception:
+                self.sink.emit(
+                    "warning",
+                    message=(
+                        f"--wait-for {wait_for_selector!r} never appeared; "
+                        "capturing whatever the page shows anyway."
+                    ),
+                )
         self._dismiss_consent_banners(page, deadline)
         # Some sites (news.nytimes.com's metered wall is one) clip the
         # article's real height down to a single viewport once a login or
@@ -378,17 +419,24 @@ class PageArchiver:
             )
 
         output = self._capture_scroll_pages(
-            page, timeout_ms, min_height=early_height, max_height=growth_ceiling
+            page,
+            self._remaining_ms(deadline),
+            min_height=early_height,
+            max_height=growth_ceiling,
+            max_pages=max_pages,
+            page_range=page_range,
         )
         return output, extraction, final_url
 
     def _capture_scroll_pages(
         self,
         page: Any,
-        timeout_ms: float,
+        screenshot_timeout_ms: float,
         *,
         min_height: int = 0,
         max_height: int = _SCROLL_GROWTH_FLOOR,
+        max_pages: int | None = None,
+        page_range: tuple[int, int] | None = None,
     ) -> Path:
         """One continuous full-page screenshot, sliced into page-sized
         chunks -- the same idea as a scrolling-capture tool, just done with
@@ -406,12 +454,17 @@ class PageArchiver:
             page.emulate_media(media="screen")
             with contextlib.suppress(Exception):
                 page.evaluate("() => window.scrollTo(0, 0)")
+            # At least 30s, but more if the timeout budget has room --
+            # a page big enough to need longer (a very long Wikipedia
+            # article was the case that surfaced this) should get to use
+            # whatever of the user's own --timeout remains, rather than a
+            # flat cap that ignores it.
             full_png = page.screenshot(
                 full_page=True,
                 type="png",
                 animations="disabled",
                 caret="hide",
-                timeout=min(timeout_ms, 30_000),
+                timeout=max(30_000.0, screenshot_timeout_ms),
             )
             image = Image.open(io.BytesIO(full_png))
             image.load()
@@ -425,11 +478,25 @@ class PageArchiver:
             # what a single article needs (see the adaptive-scroll ceiling).
             effective_height = min(max_height, max(min_height, captured_height))
             page_count = min(_MAX_SCROLL_PAGES, max(1, math.ceil(effective_height / slice_height)))
+            if max_pages is not None:
+                page_count = min(page_count, max_pages)
+
+            start_page, end_page = 1, page_count
+            if page_range is not None:
+                start_page = max(1, page_range[0])
+                end_page = min(page_count, page_range[1])
+                if start_page > end_page:
+                    raise DocDlError(
+                        "invalid_arguments",
+                        f"--select-range is beyond what was captured ({page_count} page(s))",
+                    )
+            kept_count = end_page - start_page + 1
 
             writer = PdfWriter()
             with tempfile.TemporaryDirectory(prefix="doc-dl-archive-spool-") as spool:
                 spool_path = Path(spool)
-                for index in range(page_count):
+                written = 0
+                for index in range(start_page - 1, end_page):
                     top = index * slice_height
                     if top >= captured_height:
                         break
@@ -437,14 +504,15 @@ class PageArchiver:
                     chunk = image.crop((0, top, width, bottom)).convert("RGB")
                     buffer = io.BytesIO()
                     chunk.save(buffer, format="PNG")
-                    page_file = spool_path / f"page-{index + 1:06d}.pdf"
+                    written += 1  # noqa: SIM113 -- distinct from `index`, which keeps the pre-range page number
+                    page_file = spool_path / f"page-{written:06d}.pdf"
                     write_image_page_pdf(buffer.getvalue(), page_file)
-                    append_single_page(writer, page_file, index + 1)
+                    append_single_page(writer, page_file, written)
                     self.sink.emit(
                         "download_progress",
                         message=f"Assembling page {index + 1}/{page_count}",
-                        downloaded=index + 1,
-                        total=page_count,
+                        downloaded=written,
+                        total=kept_count,
                         unit="pages",
                     )
                 write_merged_pdf(writer, output)
@@ -625,39 +693,26 @@ class PageArchiver:
 
     def _complete(self, result: ArchiveResult, request: ArchiveRequest) -> None:
         if request.write_metadata:
-            sidecar = result.path.with_name(f"{result.path.name}.doc-dl.json")
-            payload = {
-                "event": "archive",
-                "version": 1,
-                "path": str(result.path),
-                "filename": result.filename,
-                "media_type": result.media_type,
-                "size": result.size,
-                "provenance": result.provenance.value,
-                "source_url": result.source_url,
-                "final_url": result.final_url,
-                "title": result.title,
-                "byline": result.byline,
-                "published": result.published,
-                "site_name": result.site_name,
-                "canonical_url": result.canonical_url,
-                "paywall_suspected": result.paywall_suspected,
-                "page_count": result.page_count,
-                "captured_at": result.captured_at,
-            }
-            temporary = sidecar.with_suffix(f"{sidecar.suffix}.tmp")
-            try:
-                temporary.write_text(
-                    json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
-                os.replace(temporary, sidecar)
-            except OSError as exc:
-                temporary.unlink(missing_ok=True)
-                raise DocDlError(
-                    "filesystem_failure",
-                    "The metadata sidecar could not be written",
-                    detail=str(exc),
-                ) from exc
+            append_history_entry(
+                {
+                    "event": "archive",
+                    "path": str(result.path),
+                    "filename": result.filename,
+                    "media_type": result.media_type,
+                    "size": result.size,
+                    "provenance": result.provenance.value,
+                    "source_url": result.source_url,
+                    "final_url": result.final_url,
+                    "title": result.title,
+                    "byline": result.byline,
+                    "published": result.published,
+                    "site_name": result.site_name,
+                    "canonical_url": result.canonical_url,
+                    "paywall_suspected": result.paywall_suspected,
+                    "page_count": result.page_count,
+                    "captured_at": result.captured_at,
+                }
+            )
 
         self.sink.emit(
             "complete",

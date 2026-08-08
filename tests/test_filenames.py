@@ -15,7 +15,14 @@ from doc_dl.filenames import (
 
 def test_sanitize_filename_handles_windows_reserved_and_invalid_characters() -> None:
     assert sanitize_filename("CON.pdf") == "_CON.pdf"
-    assert sanitize_filename('report<>:"/\\|?*.pdf') == "report_________.pdf"
+    assert sanitize_filename('report<>:"/\\|?*.pdf') == "report________.pdf"
+
+
+def test_sanitize_filename_drops_commas_and_quote_marks() -> None:
+    assert sanitize_filename("Gravely injured, 'a voice in the dark'.pdf") == (
+        "Gravely injured a voice in the dark.pdf"
+    )
+    assert sanitize_filename("She said “hello”, then left.pdf") == "She said hello then left.pdf"
 
 
 def test_content_disposition_prefers_rfc5987_filename() -> None:

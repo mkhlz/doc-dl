@@ -178,11 +178,12 @@ BANNER_RICH = r"""   ██████╗  ██████╗  ████�
    ██████╔╝╚██████╔╝╚██████╗      ██████╔╝ ███████╗
    ╚═════╝  ╚═════╝  ╚═════╝      ╚═════╝  ╚══════╝"""
 
-BANNER_PLAIN = r"""    _                 _ _
-   | |               | | |
- __| | ___   ___    _| | |
-/ _` |/ _ \ / __|  / _` | |
-\__,_|\___/ \___|  \__,_|_|"""
+BANNER_PLAIN = r"""   ######    #####    #####            ######   ##
+   ##   ##  ##   ##  ##   ##           ##   ##  ##
+   ##   ##  ##   ##  ##        #####   ##   ##  ##
+   ##   ##  ##   ##  ##                ##   ##  ##
+   ##   ##  ##   ##  ##   ##           ##   ##  ##
+   ######    #####    #####            ######   #######"""
 
 TAGLINE = "a resilient command-line document downloader"
 
@@ -197,7 +198,7 @@ def render_banner(*, unicode_ok: bool, color: bool) -> str:
     for line in art.split("\n"):
         # The wordmark reads "doc-" in white and "dl" in the brand blue; the
         # split point differs between the two editions.
-        split = 33 if unicode_ok else 18
+        split = 33 if unicode_ok else 37
         head, tail = line[:split], line[split:]
         lines.append(f"{BOLD}{head}{RESET}{BRIGHT_BLUE}{BOLD}{tail}{RESET}")
     return "\n".join(lines) + f"\n\n        {DIM}{TAGLINE}{RESET}"

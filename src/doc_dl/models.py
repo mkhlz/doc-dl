@@ -100,6 +100,9 @@ class ArchiveRequest:
     timeout_seconds: float = 90.0
     overwrite: bool = False
     write_metadata: bool = True
+    max_pages: int | None = None
+    page_range: tuple[int, int] | None = None
+    wait_for_selector: str | None = None
 
 
 @dataclass(slots=True)

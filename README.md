@@ -28,8 +28,11 @@ verified file or get a clear reason why that was not possible.
     * [Uninstall](#uninstall)
 * [USAGE](#download-a-document)
     * [Try it with real sites](#try-it-with-real-sites)
+    * [Which command should I use?](#which-command-should-i-use)
     * [Everyday downloads](#everyday-downloads)
     * [Download options](#download-options)
+    * [Archiving a page](#archiving-a-page-news-articles-blog-posts-and-other-web-pages)
+    * [Extracting a page range from a PDF](#extracting-a-page-range-from-a-pdf)
     * [When a login is needed](#when-a-login-is-needed)
     * [Useful commands](#useful-commands)
 * [HOW IT WORKS](#how-results-are-handled)
@@ -279,6 +282,31 @@ If the virtual environment is not activated, call its executable directly:
 .\.venv\Scripts\doc-dl.exe -Url "https://www.scribd.com/document/1039114955/GMAT-Syllabus-PDF"
 ```
 
+## Which command should I use?
+
+`doc-dl` has two commands with different jobs: `download` (the default, so
+just `doc-dl URL`) looks for an actual document file; `archive` snapshots a
+page as it renders, for pages that were never a document in the first place.
+
+| | `doc-dl URL` (download) | `doc-dl archive URL` |
+| --- | --- | --- |
+| What it's for | A PDF, Office file, EPUB, or other document behind the link | A news article, blog post, or any web page you want a record of |
+| What you get | The original file when one exists; a rebuilt PDF from a viewer's pages otherwise | One PDF made from the page's own rendered layout |
+| Result quality | Byte-identical to the source when original; otherwise a faithful reconstruction | A screenshot of the page -- readable, but not the site's own typography |
+| If nothing downloadable is found | Falls back to the same page-capture `archive` does, unless `--original-only` is set | N/A -- that's the whole point of the command |
+| History log entry | Opt-in (`--write-metadata`) | On by default (`--no-metadata` to skip) -- capture provenance is the point |
+| Distinguishing options | `--original-only`, `--no-browser`, `--retries`, `--no-resume` | `--max-pages`, `--select-range`, `--wait-for` |
+| Shared options | `--output`, `--filename`, `--profile`, `--timeout`, `--overwrite`, `--quiet`, `--verbose`, `--json`, `--batch`, `--concurrency` | |
+
+Rule of thumb: if you'd expect a "Download" or "Export as PDF" button
+somewhere on the page, use `download`. If you're saving a page the way a
+browser print-to-PDF would, use `archive`.
+
+```powershell
+doc-dl "https://example.com/report.pdf"                 # a real document
+doc-dl archive "https://example.com/news/some-article"   # a page, not a document
+```
+
 ## Everyday downloads
 
 Save into a downloads folder and record redacted provenance metadata:
@@ -300,6 +328,19 @@ and `{filename}`:
 doc-dl URL --output .\downloads --filename "{provider}-{title}.{ext}"
 ```
 
+Process a list of URLs at once, several at a time:
+
+```powershell
+doc-dl --batch urls.txt --concurrency 4 --output .\downloads
+```
+
+`urls.txt` is one URL per line (blank lines and `#` comments are skipped).
+Each URL goes through the exact same pipeline as a single `doc-dl URL` run —
+same retries, same reconstruction — just several running concurrently. One
+line prints per result as it completes, in whichever order that happens to
+be, followed by a `succeeded / failed` count; a failed URL doesn't stop the
+rest of the batch.
+
 ## Download options
 
 | Option | What it does |
@@ -313,7 +354,9 @@ doc-dl URL --output .\downloads --filename "{provider}-{title}.{ext}"
 | `--retries 5` | Retry transient transfer failures. |
 | `--no-resume` | Disable protected resume for interrupted HTTP transfers. |
 | `--overwrite` | Replace an existing output file. |
-| `--write-metadata` | Save a redacted `.doc-dl.json` provenance sidecar. |
+| `--write-metadata` | Record a redacted provenance entry in the history log. |
+| `--batch FILE` | Process every URL in this file instead of one URL. |
+| `--concurrency N` | How many `--batch` URLs to run at once (default 3, max 10). |
 | `--verbose` | Show which strategies are being tried. |
 | `--json` | Emit newline-delimited JSON events for automation. |
 | `--quiet` | Print only errors and the final output path. |
@@ -334,10 +377,12 @@ site to do reliably:
 doc-dl archive "https://example.com/news/some-article"
 ```
 
-A `.doc-dl.json` metadata sidecar is written by default (opt out with
-`--no-metadata`), recording whatever title, byline, publish date, and site
-name could be read off the page's own metadata tags, and whether paywall
-indicators were detected:
+A provenance entry is recorded by default (opt out with `--no-metadata`) —
+title, byline, publish date, site name, and whether paywall indicators were
+detected — but never as a file next to the PDF. Pasting a link and getting
+a document back should mean exactly that: the download folder holds just
+the file. Everything else goes into a single history log instead (run
+`doc-dl doctor` to see where):
 
 ```json
 {
@@ -360,12 +405,50 @@ The default filename is the title, site name, and capture date —
 different sites ("Live Updates", "Home") don't collide. A `--filename`
 template still gets the plain article title as `{title}`.
 
+A long feed-style page can bunch the linked article together with unrelated
+ones below it (a news homepage, or a listing that keeps loading more stories
+as you scroll). `--max-pages` stops the capture after a set number of pages;
+`--select-range` keeps a specific range instead of just the first N:
+
+```powershell
+doc-dl archive "https://example.com/news/some-article" --max-pages 3
+doc-dl archive "https://example.com/news/some-article" --select-range 2-4
+```
+
+Some sites need more time than the built-in settle heuristics guess —
+`--wait-for` waits for a CSS selector to appear before capturing starts:
+
+```powershell
+doc-dl archive "https://example.com/slow-page" --wait-for "article"
+```
+
+Archiving supports the same `--batch` / `--concurrency` options as
+`download`, for saving a list of articles at once.
+
 | Option | What it does |
 | --- | --- |
 | `--profile NAME` | Use an isolated browser profile (useful for sites you're signed into). |
 | `--timeout 90s` | Set the full operation timeout. |
-| `--no-metadata` | Skip writing the `.doc-dl.json` sidecar. |
+| `--max-pages N` | Stop after N pages instead of capturing the whole scroll length. |
+| `--select-range 2-4` | Keep only this page range (1-indexed, inclusive); mutually exclusive with `--max-pages`. |
+| `--wait-for SELECTOR` | Wait for this CSS selector to become visible before capturing. |
+| `--batch FILE` / `--concurrency N` | Same as `download`. |
+| `--no-metadata` | Skip recording a history entry. |
 | `--overwrite` | Replace an existing output file. |
+
+## Extracting a page range from a PDF
+
+`doc-dl extract-pages` copies a page range out of a local PDF into a new
+file — grabbing one chapter out of a long book without re-uploading the
+whole thing:
+
+```powershell
+doc-dl extract-pages book.pdf --pages 37-75
+doc-dl extract-pages book.pdf --pages 37-75 --output chapter-2.pdf
+```
+
+The default output filename is `<source>-pages-<start>-<end>.pdf` next to
+the source file.
 
 ## When a login is needed
 
@@ -408,6 +491,7 @@ doc-dl version
 doc-dl providers
 doc-dl doctor
 doc-dl archive URL
+doc-dl extract-pages book.pdf --pages 37-75
 doc-dl install-browser
 doc-dl uninstall-browser
 ```

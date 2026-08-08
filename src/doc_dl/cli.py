@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import io
+import itertools
 import json
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from doc_dl import __version__
@@ -14,7 +16,9 @@ from doc_dl.doctor import doctor_payload, run_doctor
 from doc_dl.engine import DownloadEngine
 from doc_dl.errors import DocDlError
 from doc_dl.events import EventSink, safe_print
+from doc_dl.filenames import resolve_output_path
 from doc_dl.models import ArchiveRequest, DownloadRequest
+from doc_dl.pdftools import extract_pdf_pages
 from doc_dl.providers.registry import ProviderRegistry
 from doc_dl.runtime import (
     chromium_executable_path,
@@ -25,7 +29,7 @@ from doc_dl.runtime import (
     uninstall_chromium,
 )
 from doc_dl.session import SessionManager
-from doc_dl.ui import BOLD, DIM, enable_utf8_output, render_banner
+from doc_dl.ui import BOLD, DIM, GREEN, RED, YELLOW, enable_utf8_output, format_bytes, render_banner
 
 RELEASE_NAME = "Alexandria"
 
@@ -40,6 +44,7 @@ COMMANDS = {
     "clean",
     "version",
     "archive",
+    "extract-pages",
 }
 
 
@@ -53,6 +58,20 @@ def _add_output_modes(parser: argparse.ArgumentParser) -> None:
     modes.add_argument("--json", action="store_true", help="Emit newline-delimited JSON events")
     modes.add_argument("--quiet", action="store_true", help="Print only errors and the final path")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print strategy diagnostics")
+
+
+def _add_batch_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--batch",
+        type=Path,
+        help="A text file of URLs (one per line, '#' comments allowed) to process in parallel",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=3,
+        help="How many URLs from --batch to run at once (default 3, max 10)",
+    )
 
 
 def _download_parser() -> DocDlArgumentParser:
@@ -88,9 +107,10 @@ def _download_parser() -> DocDlArgumentParser:
     parser.add_argument(
         "--write-metadata",
         action="store_true",
-        help="Write a redacted .doc-dl.json provenance sidecar",
+        help="Record a redacted provenance entry in the history log ('doc-dl doctor' shows where)",
     )
     parser.add_argument("--version", action="version", version=f"doc-dl {__version__}")
+    _add_batch_options(parser)
     _add_output_modes(parser)
     return parser
 
@@ -111,11 +131,52 @@ def _archive_parser() -> DocDlArgumentParser:
     parser.add_argument("--profile", default="default", help="Isolated browser profile name")
     parser.add_argument("--overwrite", action="store_true", help="Replace an existing output")
     parser.add_argument("--timeout", default="90s", help="Total timeout, such as 60s, 5m, or 1h")
+    page_limit = parser.add_mutually_exclusive_group()
+    page_limit.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help=(
+            "Stop after this many pages, such as when a long feed page bunches the "
+            "linked article with unrelated ones below it"
+        ),
+    )
+    page_limit.add_argument(
+        "--select-range",
+        dest="select_range",
+        help="Keep only this page range, such as 2-4 (1-indexed, inclusive)",
+    )
+    parser.add_argument(
+        "--wait-for",
+        dest="wait_for_selector",
+        help=(
+            "Wait for this CSS selector to become visible before capturing, for a "
+            "page slower than the built-in settle heuristics expect"
+        ),
+    )
     parser.add_argument(
         "--no-metadata",
         action="store_true",
-        help="Skip writing the .doc-dl.json sidecar (written by default for archives)",
+        help="Skip recording a history entry (recorded by default for archives)",
     )
+    _add_batch_options(parser)
+    _add_output_modes(parser)
+    return parser
+
+
+def _extract_pages_parser() -> DocDlArgumentParser:
+    parser = DocDlArgumentParser(
+        prog="doc-dl extract-pages",
+        description="Copy a page range out of a local PDF into a new file",
+    )
+    parser.add_argument("input", type=Path, help="Path to the source PDF")
+    parser.add_argument(
+        "--pages", required=True, help="Page range to keep, such as 37-75 (1-indexed, inclusive)"
+    )
+    parser.add_argument(
+        "-o", "--output", type=Path, help="Output PDF path (default: alongside the source)"
+    )
+    parser.add_argument("--overwrite", action="store_true", help="Replace an existing output file")
     _add_output_modes(parser)
     return parser
 
@@ -213,6 +274,23 @@ def parse_duration(value: str) -> float:
     return seconds
 
 
+def parse_page_range(value: str) -> tuple[int, int]:
+    match = re.fullmatch(r"\s*(\d+)\s*-\s*(\d+)\s*", value)
+    if not match:
+        raise DocDlError(
+            "invalid_arguments",
+            f"Invalid --select-range value: {value!r}",
+            detail="Use START-END, such as 2-4.",
+        )
+    start, end = int(match.group(1)), int(match.group(2))
+    if start < 1 or end < start:
+        raise DocDlError(
+            "invalid_arguments",
+            "--select-range must have START at least 1 and END at or after START",
+        )
+    return start, end
+
+
 def _sink_from_args(args: argparse.Namespace) -> EventSink:
     return EventSink(
         json_mode=bool(getattr(args, "json", False)),
@@ -263,11 +341,77 @@ def _run_version(argv: Sequence[str]) -> int:
     return 0
 
 
+def _run_batch(
+    args: argparse.Namespace,
+    sink: EventSink,
+    worker: Callable[[str], Path],
+) -> int:
+    """Shared by `download --batch` and `archive --batch`: read the URL
+    list, run `worker` several at a time, and print one line per result as
+    it completes -- in completion order, not submission order, since that's
+    what "several at a time" means. All the printing happens back on this
+    thread, so two workers finishing together can never interleave their
+    output."""
+    from doc_dl.batch import BatchItem, clamp_concurrency, read_batch_urls, run_batch
+
+    urls = read_batch_urls(args.batch)
+    concurrency = clamp_concurrency(args.concurrency)
+    if not args.quiet and not args.json:
+        safe_print(
+            f"  Processing {len(urls)} URL(s) from {args.batch}, {concurrency} at a time",
+            file=sys.stdout,
+        )
+        safe_print("", file=sys.stdout)
+
+    def on_result(index: int, total: int, item: BatchItem) -> None:
+        if args.json:
+            safe_print(
+                json.dumps(
+                    {
+                        "event": "batch_item",
+                        "version": 1,
+                        "index": index,
+                        "total": total,
+                        "url": item.url,
+                        "ok": item.ok,
+                        "path": str(item.path) if item.path else None,
+                        "detail": item.detail,
+                    },
+                    ensure_ascii=False,
+                ),
+                file=sys.stdout,
+            )
+            return
+        if item.ok:
+            if args.quiet:
+                safe_print(str(item.path), file=sys.stdout)
+                return
+            glyph = sink._colorize(sink.glyphs.tick, GREEN) if sink.color else sink.glyphs.tick
+            safe_print(f"  [{index}/{total}] {glyph} {item.path}", file=sys.stdout)
+        else:
+            glyph = sink._colorize(sink.glyphs.cross, RED) if sink.color else sink.glyphs.cross
+            safe_print(f"  [{index}/{total}] {glyph} {item.url} -- {item.detail}", file=sys.stderr)
+
+    results = run_batch(urls, worker, concurrency=concurrency, on_result=on_result)
+    failed = sum(1 for item in results if not item.ok)
+    if not args.quiet and not args.json:
+        succeeded = len(results) - failed
+        summary = f"  {succeeded} succeeded, {failed} failed"
+        color = GREEN if failed == 0 else YELLOW
+        safe_print("", file=sys.stdout)
+        safe_print(sink._colorize(summary, color) if sink.color else summary, file=sys.stdout)
+    return 0 if failed == 0 else 1
+
+
 def _run_download(argv: Sequence[str]) -> int:
     args = _download_parser().parse_args(list(argv))
     sink = _sink_from_args(args)
     if args.retries < 0 or args.retries > 20:
         raise DocDlError("invalid_arguments", "Retries must be between 0 and 20")
+    if args.batch:
+        if args.url or args.url_option:
+            raise DocDlError("invalid_arguments", "Pass either a URL or --batch, not both")
+        return _run_download_batch(args, sink)
     request = DownloadRequest(
         url=_resolve_url(args),
         output=args.output,
@@ -287,9 +431,46 @@ def _run_download(argv: Sequence[str]) -> int:
     return 0
 
 
+def _run_download_batch(args: argparse.Namespace, sink: EventSink) -> int:
+    profile_slots = itertools.count()
+
+    def worker(url: str) -> Path:
+        per_sink = EventSink(quiet=True, stream=io.StringIO(), error_stream=io.StringIO())
+        # Chromium locks its own user-data-dir, so two concurrent launches
+        # sharing one profile fail outright ("Chromium could not be
+        # started") rather than queueing -- each concurrent worker needs
+        # its own. Bounded by batch size, reused on the next run.
+        worker_profile = f"{args.profile}-batch-{next(profile_slots)}"
+        request = DownloadRequest(
+            url=url,
+            output=args.output,
+            filename_template=args.filename_template,
+            original_only=args.original_only,
+            allow_render=not args.original_only,
+            forced_provider=args.forced_provider,
+            profile=worker_profile,
+            browser_enabled=not args.no_browser,
+            resume=not args.no_resume,
+            overwrite=args.overwrite,
+            timeout_seconds=parse_duration(args.timeout),
+            retries=args.retries,
+            write_metadata=args.write_metadata,
+        )
+        return DownloadEngine(per_sink).download(request).path
+
+    return _run_batch(args, sink, worker)
+
+
 def _run_archive(argv: Sequence[str]) -> int:
     args = _archive_parser().parse_args(list(argv))
     sink = _sink_from_args(args)
+    if args.max_pages is not None and args.max_pages < 1:
+        raise DocDlError("invalid_arguments", "--max-pages must be 1 or greater")
+    page_range = parse_page_range(args.select_range) if args.select_range else None
+    if args.batch:
+        if args.url or args.url_option:
+            raise DocDlError("invalid_arguments", "Pass either a URL or --batch, not both")
+        return _run_archive_batch(args, sink, page_range)
     request = ArchiveRequest(
         url=_resolve_url(args),
         output=args.output,
@@ -298,8 +479,62 @@ def _run_archive(argv: Sequence[str]) -> int:
         timeout_seconds=parse_duration(args.timeout),
         overwrite=args.overwrite,
         write_metadata=not args.no_metadata,
+        max_pages=args.max_pages,
+        page_range=page_range,
+        wait_for_selector=args.wait_for_selector,
     )
     PageArchiver(sink).archive(request)
+    return 0
+
+
+def _run_archive_batch(
+    args: argparse.Namespace,
+    sink: EventSink,
+    page_range: tuple[int, int] | None,
+) -> int:
+    profile_slots = itertools.count()
+
+    def worker(url: str) -> Path:
+        per_sink = EventSink(quiet=True, stream=io.StringIO(), error_stream=io.StringIO())
+        worker_profile = f"{args.profile}-batch-{next(profile_slots)}"
+        request = ArchiveRequest(
+            url=url,
+            output=args.output,
+            filename_template=args.filename_template,
+            profile=worker_profile,
+            timeout_seconds=parse_duration(args.timeout),
+            overwrite=args.overwrite,
+            write_metadata=not args.no_metadata,
+            max_pages=args.max_pages,
+            page_range=page_range,
+            wait_for_selector=args.wait_for_selector,
+        )
+        return PageArchiver(per_sink).archive(request).path
+
+    return _run_batch(args, sink, worker)
+
+
+def _run_extract_pages(argv: Sequence[str]) -> int:
+    args = _extract_pages_parser().parse_args(list(argv))
+    sink = _sink_from_args(args)
+    source = args.input.expanduser()
+    if not source.is_file():
+        raise DocDlError("invalid_arguments", f"No such file: {source}")
+    page_range = parse_page_range(args.pages)
+    default_name = f"{source.stem}-pages-{page_range[0]}-{page_range[1]}{source.suffix or '.pdf'}"
+    output = resolve_output_path(args.output, default_name, overwrite=args.overwrite)
+    page_count = extract_pdf_pages(source, page_range, output)
+    size = output.stat().st_size
+    sink.emit(
+        "complete",
+        path=str(output),
+        filename=output.name,
+        media_type="application/pdf",
+        bytes=size,
+        source_url=str(source),
+        page_count=page_count,
+        facts=[format_bytes(size), f"{page_count} pages", f"from {source.name}"],
+    )
     return 0
 
 
@@ -447,6 +682,7 @@ def _print_bare_invocation_help() -> None:
     safe_print('  doc-dl "https://example.com/document.pdf"', file=sys.stdout)
     safe_print('  doc-dl -Url "https://example.com/document.pdf"', file=sys.stdout)
     safe_print('  doc-dl archive "https://example.com/news/some-article"', file=sys.stdout)
+    safe_print("  doc-dl extract-pages book.pdf --pages 37-75", file=sys.stdout)
     safe_print("  doc-dl doctor", file=sys.stdout)
 
 
@@ -484,6 +720,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             return _run_version(command_args)
         if command == "archive":
             return _run_archive(command_args)
+        if command == "extract-pages":
+            return _run_extract_pages(command_args)
         return _run_download(arguments)
     except DocDlError as exc:
         json_mode = "--json" in arguments
